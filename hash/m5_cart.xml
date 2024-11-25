@@ -75,6 +75,28 @@ and why some of the dumps below have weird size?
 
 <!-- Games -->
 
+	<software name="cheg">
+		<description>Cheg</description>
+		<year>2022</year>
+		<publisher>SMB</publisher>
+		<part name="cart" interface="m5_cart">
+			<dataarea name="rom" size="16384">
+				<rom name="m5cheg.bin" size="16384" crc="00000000" sha1="0" offset="00000" />
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="cheg24">
+		<description>Cheg24</description>
+		<year>2022</year>
+		<publisher>SMB</publisher>
+		<part name="cart" interface="m5_cart">
+			<dataarea name="rom" size="20480">
+				<rom name="m5cheg24.bin" size="20480" crc="00000000" sha1="0" offset="00000" />
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="digdug">
 		<description>Dig Dug</description>
 		<year>1982</year>
