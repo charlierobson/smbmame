@@ -124,7 +124,11 @@
 #include "z80.h"
 #include "z80dasm.h"
 
+#include <emuopts.h>
+
 #define VERBOSE             0
+
+static const int BIOSBASE = 0xe000;
 
 /* On an NMOS Z80, if LD A,I or LD A,R is interrupted, P/V flag gets reset,
    even if IFF2 was set before this instruction. This issue was fixed on
@@ -132,6 +136,12 @@
 #define HAS_LDAIR_QUIRK     0
 
 #define LOG(x)  do { if (VERBOSE) logerror x; } while (0)
+
+static void reportCall(long pc, long target) {
+	//if (pc > 0x8000 && target < 0x2000) {
+	//	osd_printf_info("CALL/JP to %04x from $%04x\n", target, pc);
+	//}
+}
 
 
 /****************************************************************************/
@@ -439,30 +449,143 @@ inline void z80_device::leave_halt()
 	}
 }
 
+
+bool rept = false;  // ini,inir,outi,otir
+
+bool remap67;
+bool remapIn;
+bool remapOut;
+
+std::set<int> inpoots;
+
 /***************************************************************
  * Input a byte from given I/O port
  ***************************************************************/
 inline uint8_t z80_device::in(uint16_t port)
 {
+	auto adrlo = port & 0xff;
+	/*
+			80-9F (R) = Not Connected
+			A0-BF (R) = Video Chip (TMS9928A), A0=0 -> Read Register 0 , A0=1 -> Read Register 1
+			C0-DF (R) = Not Connected
+			E0-FF (R) = Read Controller data, A1=0 -> read controller 1, A1=1 -> read controller 2
+	*/
+
+	if (PCD - 2 >= 0x8000 && PCD - 2 < 0xE000) {
+		auto it = std::find(inpoots.begin(), inpoots.end(), PCD);
+		if (it == inpoots.end()) {
+			inpoots.insert(PCD);
+
+			if ((adrlo >= 0x80 && adrlo <= 0x9f) || (adrlo >= 0xc0 && adrlo <= 0xdf)) {
+				osd_printf_info("in a,(%02x) @%04x  ????\n\n", adrlo, m_pc.d - 2);
+			}
+
+			if (adrlo >= 0xe0 && adrlo <= 0xff) {
+				auto destReg = (adrlo & 1) ? "IO_CTLR_2" : "IO_CTLR_1";
+				osd_printf_info("in a,(%s) @%04x\n\n", destReg, m_pc.d - 2);
+			}
+
+			if (adrlo >= 0xa0 && adrlo <= 0xbf && !rept) {
+				auto destReg = (adrlo & 1) ? "IO_VDP_Addr" : "IO_VDP_Data";
+				osd_printf_info("PATCH($%04x,2)\n    in a,(%s)\nENDPATCH($%04x,2)\n\n", m_pc.d - 2, destReg, m_pc.d - 2);
+				if (remapIn) {
+					port = (port & 0xff00) + 0x10 + (adrlo & 1);
+				}
+			}
+			if (adrlo >= 0xa0 && adrlo <= 0xbf && rept) {
+				osd_printf_info("INI(R) (%02x) @%04x", adrlo, m_pc.d - 2);
+			}
+		}
+	}
+
 	u8 res = m_io.read_byte(port);
 	T(4);
 	return res;
 }
 
+
+std::set<int> outpoots;
+uint8_t prevValue = 0;
+
+bool latch;
+
 /***************************************************************
- * Output a byte to given I/O port
- ***************************************************************/
+ * Output a byte to given I/O port ***************************************************************/
 inline void z80_device::out(uint16_t port, uint8_t value)
 {
+	auto adrlo = port & 0xff;
+
+	/*
+			80-9F (W) = Set both controllers to keypad mode
+			A0-BF (W) = Video Chip (TMS9928A), A0=0 -> Write Register 0 , A0=1 -> Write Register 1
+			C0-DF (W) = Set both controllers to joystick mode
+			E0-FF (W) = Sound Chip (SN76489A)
+	*/
+	if (m_pc.d - 2 >= 0x8000 && m_pc.d - 2 < 0xE000) {
+
+		if (adrlo == 0x11) {
+			if (latch && (value & 0xf8) == 0x80)
+				osd_printf_info("reg %02x = %02x @%04x\n", value & 0x7f, prevValue, m_pc.d - 2);
+			latch = !latch;
+		}
+
+		auto it = std::find(outpoots.begin(), outpoots.end(), m_pc.d);
+		if (it == outpoots.end()) {
+			outpoots.insert(m_pc.d);
+
+			if (adrlo >= 0x80 && adrlo <= 0x9f) {
+				osd_printf_info("out (IO_CTLSEL),a   KEYPAD MODE  @%04x\n\n", m_pc.d - 2);
+			}
+
+			if (adrlo >= 0xc0 && adrlo <= 0xdf) {
+				osd_printf_info("out (IO_CTLSEL),a   JOYSTICK MODE  @%04x\n\n", m_pc.d - 2);
+			}
+
+			if (adrlo >= 0xa0 && adrlo <= 0xbf && !rept) {
+				auto destReg = (adrlo & 1) ? "IO_VDP_Addr" : "IO_VDP_Data";
+				osd_printf_info("PATCH($%04x,2)\n    out (%s),a\nENDPATCH($%04x,2)\n\n", m_pc.d - 2, destReg, m_pc.d - 2);
+				if (remapOut) {
+					port = (port & 0xff00) + 0x10 + (adrlo & 1);
+				}
+			}
+			if (adrlo >= 0xa0 && adrlo <= 0xbf && rept) {
+				osd_printf_info("OTI(R) (%02x) @%04x", adrlo, m_pc.d - 2);
+			}
+
+			if (adrlo >= 0xe0 && adrlo <= 0xff) {
+				osd_printf_info("PATCH($%04x,2)\n    out (IO_PSG),a\nENDPATCH($%04x,2)\n\n", m_pc.d - 2, m_pc.d - 2);
+				if (remapOut) {
+					port = 0x20;
+				}
+			}
+		}
+	}
+
+	prevValue = value;
+
 	m_io.write_byte(port, value);
 	T(4);
 }
+
+
+std::set<int> wrs;
 
 /***************************************************************
  * Read a byte from given memory location
  ***************************************************************/
 uint8_t z80_device::rm(uint16_t addr)
 {
+	if (addr >= 0x6000 && addr < 0x7000 && m_pc.d > 0x8000) {
+		auto it = std::find(wrs.begin(), wrs.end(), m_pc.d);
+		if (it == wrs.end()) {
+			wrs.insert(m_pc.d);
+			osd_printf_info("read from $%04x @~$%04x\n", addr, m_pc.d);
+		}
+
+		if (remap67)
+			addr += 0x1000;
+	}
+
 	u8 res = m_data.read_byte(addr);
 	T(MTM);
 	return res;
@@ -484,11 +607,23 @@ inline void z80_device::rm16(uint16_t addr, PAIR &r)
 	r.b.h = rm(addr+1);
 }
 
+
 /***************************************************************
  * Write a byte to given memory location
  ***************************************************************/
 void z80_device::wm(uint16_t addr, uint8_t value)
 {
+	if (addr >= 0x6000 && addr < 0x7000 && m_pc.d > 0x8000) {
+		auto it = std::find(wrs.begin(), wrs.end(), m_pc.d);
+		if (it == wrs.end()) {
+			wrs.insert(m_pc.d);
+			osd_printf_info("write to $%04x @~$%04x\n", addr, m_pc.d);
+		}
+
+		if (remap67)
+			addr += 0x1000;
+	}
+
 	// As we don't count changes between read and write, simply adjust to the end of requested.
 	if(m_icount_executing != MTM) T(m_icount_executing - MTM);
 	m_data.write_byte(addr, value);
@@ -524,6 +659,7 @@ inline void z80_device::wm16_sp(PAIR &r)
  * reading opcodes. In case of system with memory mapped I/O,
  * this function can be used to greatly speed up emulation
  ***************************************************************/
+std::set<int> vects;
 uint8_t z80_device::rop()
 {
 	// Use leftovers from previous instruction. Mainly to support recursive EXEC(.., rop())
@@ -534,7 +670,6 @@ uint8_t z80_device::rop()
 	T(execute_min_cycles());
 	PC++;
 	m_r++;
-
 	return res;
 }
 
@@ -599,7 +734,21 @@ inline void z80_device::push(PAIR &r)
  ***************************************************************/
 inline void z80_device::jp(void)
 {
-	PCD = arg16();
+	auto dest = arg16();
+	reportCall(m_pc.d - 3, dest);
+
+	auto pc = PCD - 3;
+	if (pc >= 0x8000 && pc < 0xE000 && dest < 0x2000) {
+		auto it = std::find(vects.begin(), vects.end(), pc);
+		if (it == vects.end()) {
+			vects.insert(pc);
+			osd_printf_info("PATCH($%04x,3)\n    jp $%04x\nENDPATCH($%04x,3)\n\n", pc, dest+BIOSBASE, pc);
+		}
+		if (remap67)
+			dest += BIOSBASE;
+	}
+
+	PCD = dest;
 	WZ = PCD;
 }
 
@@ -608,13 +757,16 @@ inline void z80_device::jp(void)
  ***************************************************************/
 inline void z80_device::jp_cond(bool cond)
 {
+	auto pc = m_pc.d - 3;
 	if (cond)
 	{
 		PCD = arg16();
 		WZ = PCD;
 	}
-	else
+	else {
 		WZ = arg16(); /* implicit do PC += 2 */
+	}
+	reportCall(pc, WZ);
 }
 
 /***************************************************************
@@ -652,10 +804,24 @@ inline void z80_device::jr_cond(bool cond, uint8_t opcode)
 inline void z80_device::call()
 {
 	m_ea = arg16();
+	reportCall(m_pc.d - 3, m_ea);
+
+	auto pcd = m_ea;
+	auto pc = PCD - 3;
+	if (pc >= 0x8000 && pc < 0xE000 && pcd < 0x2000) {
+		auto it = std::find(vects.begin(), vects.end(), pc);
+		if (it == vects.end()) {
+			vects.insert(pc);
+			osd_printf_info("PATCH($%04x,3)\n    call $%04x\nENDPATCH($%04x,3)\n\n", pc, pcd+BIOSBASE, pc);
+		}
+		if (remap67)
+			pcd += BIOSBASE;
+	}
+
 	nomreq_addr(PCD-1, 1);
-	WZ = m_ea;
+	WZ = pcd;
 	wm16_sp(m_pc);
-	PCD = m_ea;
+	PCD = pcd;
 }
 
 /***************************************************************
@@ -663,6 +829,7 @@ inline void z80_device::call()
  ***************************************************************/
 inline void z80_device::call_cond(bool cond, uint8_t opcode)
 {
+	auto pc = m_pc.d - 3;
 	if (cond)
 	{
 		CC(ex, opcode);
@@ -672,8 +839,10 @@ inline void z80_device::call_cond(bool cond, uint8_t opcode)
 		wm16_sp(m_pc);
 		PCD = m_ea;
 	}
-	else
+	else {
 		WZ = arg16(); /* implicit call PC+=2; */
+	}
+	reportCall(pc, WZ);
 }
 
 /***************************************************************
@@ -1233,7 +1402,9 @@ inline void z80_device::ini()
 {
 	nomreq_ir(1);
 	unsigned t;
+	rept = true;
 	uint8_t io = in(BC);
+	rept = false;
 	WZ = BC + 1;
 	B--;
 	wm(HL, io);
@@ -1255,7 +1426,9 @@ inline void z80_device::outi()
 	uint8_t io = rm(HL);
 	B--;
 	WZ = BC + 1;
+	rept = true;
 	out(BC, io);
+	rept = false;
 	HL++;
 	F = SZ[B];
 	t = (unsigned)L + (unsigned)io;
@@ -2316,7 +2489,7 @@ OP(dd,e6) { illegal_1(); op_e6();                            } /* DB   DD       
 OP(dd,e7) { illegal_1(); op_e7();                            } /* DB   DD          */
 
 OP(dd,e8) { illegal_1(); op_e8();                            } /* DB   DD          */
-OP(dd,e9) { PC = IX;                                         } /* JP   (IX)        */
+OP(dd,e9) { reportCall(PC, IX);	 PC = IX;                                         } /* JP   (IX)        */
 OP(dd,ea) { illegal_1(); op_ea();                            } /* DB   DD          */
 OP(dd,eb) { illegal_1(); op_eb();                            } /* DB   DD          */
 OP(dd,ec) { illegal_1(); op_ec();                            } /* DB   DD          */
@@ -2607,7 +2780,7 @@ OP(fd,e6) { illegal_1(); op_e6();                            } /* DB   FD       
 OP(fd,e7) { illegal_1(); op_e7();                            } /* DB   FD          */
 
 OP(fd,e8) { illegal_1(); op_e8();                            } /* DB   FD          */
-OP(fd,e9) { PC = IY;                                         } /* JP   (IY)        */
+OP(fd,e9) { reportCall(PC, IY);	  PC = IY;                                         } /* JP   (IY)        */
 OP(fd,ea) { illegal_1(); op_ea();                            } /* DB   FD          */
 OP(fd,eb) { illegal_1(); op_eb();                            } /* DB   FD          */
 OP(fd,ec) { illegal_1(); op_ec();                            } /* DB   FD          */
@@ -2720,7 +2893,7 @@ OP(ed,42) { sbc_hl(m_bc);                                    } /* SBC  HL,BC    
 OP(ed,43) { m_ea = arg16(); wm16(m_ea, m_bc); WZ = m_ea + 1; } /* LD   (w),BC      */
 OP(ed,44) { neg();                                           } /* NEG              */
 OP(ed,45) { retn();                                          } /* RETN             */
-OP(ed,46) { m_im = 0;                                        } /* IM   0           */
+OP(ed, 46) { m_im = 0;                                       } /* IM   0           */
 OP(ed,47) { ld_i_a();                                        } /* LD   i,A         */
 
 OP(ed,48) { C = in(BC); F = (F & CF) | SZP[C];               } /* IN   C,(C)       */
@@ -3196,7 +3369,7 @@ OP(op,e6) { and_a(arg());                                                       
 OP(op,e7) { rst(0x20);                                                            } /* RST  4           */
 
 OP(op,e8) { ret_cond(F & PF, 0xe8);                                               } /* RET  PE          */
-OP(op,e9) { PC = HL;                                                              } /* JP   (HL)        */
+OP(op,e9) {	reportCall(PC, HL);	 PC = HL;                                         } /* JP   (HL)        */
 OP(op,ea) { jp_cond(F & PF);                                                      } /* JP   PE,a        */
 OP(op,eb) { ex_de_hl();                                                           } /* EX   DE,HL       */
 OP(op,ec) { call_cond(F & PF, 0xec);                                              } /* CALL PE,a        */
@@ -3207,7 +3380,7 @@ OP(op,ef) { rst(0x28);                                                          
 OP(op,f0) { ret_cond(!(F & SF), 0xf0);                                            } /* RET  P           */
 OP(op,f1) { pop(m_af);                                                            } /* POP  AF          */
 OP(op,f2) { jp_cond(!(F & SF));                                                   } /* JP   P,a         */
-OP(op,f3) { m_iff1 = m_iff2 = 0;                                                  } /* DI               */
+OP(op, f3) {	m_iff1 = m_iff2 = 0;                                              } /* DI               */
 OP(op,f4) { call_cond(!(F & SF), 0xf4);                                           } /* CALL P,a         */
 OP(op,f5) { push(m_af);                                                           } /* PUSH AF          */
 OP(op,f6) { or_a(arg());                                                          } /* OR   n           */
@@ -3830,6 +4003,16 @@ z80_device::z80_device(const machine_config &mconfig, device_type type, const ch
 	m_nomreq_cb(*this),
 	m_halt_cb(*this)
 {
+	std::string m5c_opts(mconfig.options().m5C_opts());
+
+	remap67 = m5c_opts.find("remap67") != -1;
+	remapIn = m5c_opts.find("remapIn") != -1;
+	remapOut = m5c_opts.find("remapOut") != -1;
+	if (m5c_opts.find("remapAll") != -1) {
+		remap67 = true;
+		remapIn = true;
+		remapOut = true;
+	}
 }
 
 device_memory_interface::space_config_vector z80_device::memory_space_config() const

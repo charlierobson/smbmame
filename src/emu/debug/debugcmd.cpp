@@ -209,8 +209,9 @@ debugger_commands::debugger_commands(running_machine& machine, debugger_cpu& cpu
 
 	// add all the commands
 	m_console.register_command("help",      CMDFLAG_NONE, 0, 1, std::bind(&debugger_commands::execute_help, this, _1));
+	m_console.register_command("rem",       CMDFLAG_NONE, 1, MAX_COMMAND_PARAMS, std::bind(&debugger_commands::execute_rem, this, _1));
 	m_console.register_command("print",     CMDFLAG_NONE, 1, MAX_COMMAND_PARAMS, std::bind(&debugger_commands::execute_print, this, _1));
-	m_console.register_command("printf",    CMDFLAG_NONE, 1, MAX_COMMAND_PARAMS, std::bind(&debugger_commands::execute_printf, this, _1));
+	m_console.register_command("printf",	CMDFLAG_NONE, 1, MAX_COMMAND_PARAMS, std::bind(&debugger_commands::execute_printf, this, _1));
 	m_console.register_command("logerror",  CMDFLAG_NONE, 1, MAX_COMMAND_PARAMS, std::bind(&debugger_commands::execute_logerror, this, _1));
 	m_console.register_command("tracelog",  CMDFLAG_NONE, 1, MAX_COMMAND_PARAMS, std::bind(&debugger_commands::execute_tracelog, this, _1));
 	m_console.register_command("tracesym",  CMDFLAG_NONE, 1, MAX_COMMAND_PARAMS, std::bind(&debugger_commands::execute_tracesym, this, _1));
@@ -1116,6 +1117,14 @@ void debugger_commands::execute_printf(const std::vector<std::string_view> &para
 	std::ostringstream buffer;
 	if (mini_printf(buffer, params[0], params.size() - 1, &values[1]))
 		m_console.printf("%s\n", std::move(buffer).str());
+}
+
+/*-------------------------------------------------
+    rem - ignore rest of line
+-------------------------------------------------*/
+
+void debugger_commands::execute_rem(const std::vector<std::string_view>& params)
+{
 }
 
 

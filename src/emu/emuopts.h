@@ -20,6 +20,8 @@
 #define OPTION_SYSTEMNAME           core_options::unadorned(0)
 #define OPTION_SOFTWARENAME         core_options::unadorned(1)
 
+#define OPTION_M5COPTS				"m5c"
+
 // core configuration options
 #define OPTION_READCONFIG           "readconfig"
 #define OPTION_WRITECONFIG          "writeconfig"
@@ -323,6 +325,8 @@ public:
 	const char *plugins_path() const { return value(OPTION_PLUGINSPATH); }
 	const char *language_path() const { return value(OPTION_LANGUAGEPATH); }
 	const char *sw_path() const { return value(OPTION_SWPATH); }
+
+	const char *m5C_opts() const { return value(OPTION_M5COPTS); }
 
 	// core directory options
 	const char *cfg_directory() const { return value(OPTION_CFG_DIRECTORY); }

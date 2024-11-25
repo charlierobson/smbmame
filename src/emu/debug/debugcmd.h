@@ -105,7 +105,8 @@ private:
 
 	void execute_help(const std::vector<std::string_view> &params);
 	void execute_print(const std::vector<std::string_view> &params);
-	void execute_printf(const std::vector<std::string_view> &params);
+	void execute_printf(const std::vector<std::string_view>& params);
+	void execute_rem(const std::vector<std::string_view>& params);
 	void execute_logerror(const std::vector<std::string_view> &params);
 	void execute_tracelog(const std::vector<std::string_view> &params);
 	void execute_tracesym(const std::vector<std::string_view> &params);

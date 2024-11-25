@@ -26,24 +26,28 @@
 #include "emu.h"
 #include "tms9928a.h"
 
+#include <emuopts.h>
 
 DEFINE_DEVICE_TYPE(TMS9928A, tms9928a_device, "tms9928a", "TMS9928A VDP")
-DEFINE_DEVICE_TYPE(TMS9918,  tms9918_device,  "tms9918",  "TMS9918 VDP")
+DEFINE_DEVICE_TYPE(TMS9918, tms9918_device, "tms9918", "TMS9918 VDP")
 DEFINE_DEVICE_TYPE(TMS9918A, tms9918a_device, "tms9918a", "TMS9918A VDP")
-DEFINE_DEVICE_TYPE(TMS9118,  tms9118_device,  "tms9118",  "TMS9118 VDP")
-DEFINE_DEVICE_TYPE(TMS9128,  tms9128_device,  "tms9128",  "TMS9128 VDP")
-DEFINE_DEVICE_TYPE(TMS9929,  tms9929_device,  "tms9929",  "TMS9929 VDP")
+DEFINE_DEVICE_TYPE(TMS9118, tms9118_device, "tms9118", "TMS9118 VDP")
+DEFINE_DEVICE_TYPE(TMS9128, tms9128_device, "tms9128", "TMS9128 VDP")
+DEFINE_DEVICE_TYPE(TMS9929, tms9929_device, "tms9929", "TMS9929 VDP")
 DEFINE_DEVICE_TYPE(TMS9929A, tms9929a_device, "tms9929a", "TMS9929A VDP")
-DEFINE_DEVICE_TYPE(TMS9129,  tms9129_device,  "tms9129",  "TMS9129 VDP")
+DEFINE_DEVICE_TYPE(TMS9129, tms9129_device, "tms9129", "TMS9129 VDP")
 DEFINE_DEVICE_TYPE(EFO90501, efo90501_device, "efo90501", "EFO90501 VDP")
 
 // ======= Debugging =========
 
+bool tr_r;
+bool tr_m;
+
 // Log register accesses
-#define TRACE_REG 0
+#define TRACE_REG tr_r
 
 // Log mode settings
-#define TRACE_MODE 0
+#define TRACE_MODE tr_m
 
 // ===========================
 
@@ -55,6 +59,7 @@ void tms9928a_device::memmap(address_map &map)
 	if (!has_configured_map(0))
 		map(0x0000, 0x3fff).ram();
 }
+
 
 tms9928a_device::tms9928a_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, uint16_t horz_total, bool is_50hz, bool is_reva, bool is_99)
 	: device_t(mconfig, type, tag, owner, clock)
@@ -70,6 +75,10 @@ tms9928a_device::tms9928a_device(const machine_config &mconfig, device_type type
 	, m_99(is_99)
 	, m_space_config("vram", ENDIANNESS_BIG, 8, 14, 0, address_map_constructor(FUNC(tms9928a_device::memmap), this))
 {
+	std::string m5c_opts(mconfig.options().m5C_opts());
+
+	tr_r = m5c_opts.find("tracereg") != -1;
+	tr_m = m5c_opts.find("tracemode") != -1;
 }
 
 void tms9928a_device::device_config_complete()
@@ -252,7 +261,7 @@ void tms9928a_device::change_register(uint8_t reg, uint8_t val)
 	val &= Mask[reg];
 	m_Regs[reg] = val;
 
-	if (TRACE_REG) logerror("TMS9928A('%s'): Reg %d = %02xh\n", tag(), reg, (int)val);
+	if (TRACE_REG) osd_printf_info("TMS9928A('%s'): Reg %d = %02xh\n", tag(), reg, (int)val);
 
 	switch (reg)
 	{
@@ -272,15 +281,23 @@ void tms9928a_device::change_register(uint8_t reg, uint8_t val)
 		m_mode = ( (m_reva ? (m_Regs[0] & 2) : 0) | ((m_Regs[1] & 0x10)>>4) | ((m_Regs[1] & 8)>>1));
 		if ((val ^ prev) & 1)
 			update_backdrop();
-		if (TRACE_MODE) logerror("TMS9928A('%s'): %s\n", tag(), modes[m_mode]);
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): %s, bit 0 (ext vid/PAL): %d\n", tag(), modes[m_mode], val & 1);
 		break;
 	case 1:
 		check_interrupt();
 		m_mode = ( (m_reva ? (m_Regs[0] & 2) : 0) | ((m_Regs[1] & 0x10)>>4) | ((m_Regs[1] & 8)>>1));
-		if (TRACE_MODE) logerror("TMS9928A('%s'): %s\n", tag(), modes[m_mode]);
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): ram ena irq 16x mag   %s\n", tag(), modes[m_mode]);
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): %s  %s  %s  %s   %s\n", tag(),\
+			(val & 0x80) ? "16k" : " 4k",\
+			(val & 0x40) ? "y" : "n",\
+			(val & 0x20) ? " on" : "off",\
+			(val & 0x02) ? "y" : "n",\
+			(val & 0x01) ? "y" : "n"\
+		);
 		break;
 	case 2:
 		m_nametbl = (val * 1024) & (m_vram_size - 1);
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): name table = %04x\n", tag(), m_nametbl);
 		break;
 	case 3:
 		if (m_Regs[0] & 2)
@@ -292,6 +309,7 @@ void tms9928a_device::change_register(uint8_t reg, uint8_t val)
 		{
 			m_colour = (val * 64) & (m_vram_size - 1);
 		}
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): colour table = %04x\n", tag(), m_colour);
 		break;
 	case 4:
 		if (m_Regs[0] & 2)
@@ -303,16 +321,20 @@ void tms9928a_device::change_register(uint8_t reg, uint8_t val)
 		{
 			m_pattern = (val * 2048) & (m_vram_size - 1);
 		}
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): pattern table = %04x\n", tag(), m_pattern);
 		break;
 	case 5:
 		m_spriteattribute = (val * 128) & (m_vram_size - 1);
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): sprite attrib table = %04x\n", tag(), m_spriteattribute);
 		break;
 	case 6:
 		m_spritepattern = (val * 2048) & (m_vram_size - 1);
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): sprite pattern table = %04x\n", tag(), m_spritepattern);
 		break;
 	case 7:
 		if ((val ^ prev) & 15)
 			update_backdrop();
+		if (TRACE_MODE) osd_printf_info("TMS9928A('%s'): fg colour %02x, bg colour %02x\n", tag(), val >> 4, val & 15);
 		break;
 	}
 }

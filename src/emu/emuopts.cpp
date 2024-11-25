@@ -34,6 +34,8 @@ const options_entry emu_options::s_option_entries[] =
 	{ OPTION_READCONFIG ";rc",                           "1",         core_options::option_type::BOOLEAN,    "enable loading of configuration files" },
 	{ OPTION_WRITECONFIG ";wc",                          "0",         core_options::option_type::BOOLEAN,    "write configuration to (driver).ini on exit" },
 
+	{ OPTION_M5COPTS,									 "",		  core_options::option_type::STRING,     "M5Conversion options" },
+
 	// search path options
 	{ nullptr,                                           nullptr,     core_options::option_type::HEADER,     "CORE SEARCH PATH OPTIONS" },
 	{ OPTION_PLUGINDATAPATH,                             ".",         core_options::option_type::STRING,     "path to base folder for plugin data (read/write)" },
