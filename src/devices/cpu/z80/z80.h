@@ -149,6 +149,8 @@ protected:
 	void leave_halt();
 	uint8_t in(uint16_t port);
 	void out(uint16_t port, uint8_t value);
+	void informout(uint16_t port, uint8_t value, const char* opcodedesc);
+	void informin(uint16_t port, uint8_t value, const char* opcodedesc);
 	virtual uint8_t rm(uint16_t addr);
 	uint8_t rm_reg(uint16_t addr);
 	void rm16(uint16_t addr, PAIR &r);

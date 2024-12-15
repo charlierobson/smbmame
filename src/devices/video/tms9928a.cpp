@@ -40,8 +40,8 @@ DEFINE_DEVICE_TYPE(EFO90501, efo90501_device, "efo90501", "EFO90501 VDP")
 
 // ======= Debugging =========
 
-bool tr_r;
-bool tr_m;
+bool tr_r = true;
+bool tr_m = true;
 
 // Log register accesses
 #define TRACE_REG tr_r

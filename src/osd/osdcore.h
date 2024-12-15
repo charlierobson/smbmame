@@ -22,6 +22,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <set>
 
 
 /// \brief Get environment variable value
@@ -30,7 +31,7 @@
 ///   NUL-terminated string.
 /// \return Pointer to environment variable value as a NUL-terminated
 ///   string if found, or nullptr if not found.
-const char *osd_getenv(const char *name);
+const char* osd_getenv(const char* name);
 
 
 /// \brief Get current process ID
@@ -40,29 +41,29 @@ int osd_getpid();
 
 
 /*-----------------------------------------------------------------------------
-    osd_uchar_from_osdchar: convert the given character or sequence of
-        characters from the OS-default encoding to a Unicode character
+	osd_uchar_from_osdchar: convert the given character or sequence of
+		characters from the OS-default encoding to a Unicode character
 
-    Parameters:
+	Parameters:
 
-        uchar - pointer to a uint32_t to receive the resulting unicode
-            character
+		uchar - pointer to a uint32_t to receive the resulting unicode
+			character
 
-        osdchar - pointer to one or more chars that are in the OS-default
-            encoding
+		osdchar - pointer to one or more chars that are in the OS-default
+			encoding
 
-        count - number of characters provided in the OS-default encoding
+		count - number of characters provided in the OS-default encoding
 
-    Return value:
+	Return value:
 
-        The number of characters required to form a Unicode character.
+		The number of characters required to form a Unicode character.
 -----------------------------------------------------------------------------*/
-int osd_uchar_from_osdchar(char32_t *uchar, const char *osdchar, size_t count);
+int osd_uchar_from_osdchar(char32_t* uchar, const char* osdchar, size_t count);
 
 
 
 /***************************************************************************
-    TIMING INTERFACES
+	TIMING INTERFACES
 ***************************************************************************/
 
 /* a osd_ticks_t is a 64-bit unsigned integer that is used as a core type in timing interfaces */
@@ -70,67 +71,67 @@ typedef uint64_t osd_ticks_t;
 
 
 /*-----------------------------------------------------------------------------
-    osd_ticks: return the current running tick counter
+	osd_ticks: return the current running tick counter
 
-    Parameters:
+	Parameters:
 
-        None
+		None
 
-    Return value:
+	Return value:
 
-        an osd_ticks_t value which represents the current tick counter
+		an osd_ticks_t value which represents the current tick counter
 
-    Notes:
+	Notes:
 
-        The resolution of this counter should be 1ms or better for accurate
-        performance. It is also important that the source of this timer be
-        accurate. It is ok if this call is not ultra-fast, since it is
-        primarily used for once/frame synchronization.
+		The resolution of this counter should be 1ms or better for accurate
+		performance. It is also important that the source of this timer be
+		accurate. It is ok if this call is not ultra-fast, since it is
+		primarily used for once/frame synchronization.
 -----------------------------------------------------------------------------*/
 osd_ticks_t osd_ticks();
 
 
 /*-----------------------------------------------------------------------------
-    osd_ticks_per_second: return the number of ticks per second
+	osd_ticks_per_second: return the number of ticks per second
 
-    Parameters:
+	Parameters:
 
-        None
+		None
 
-    Return value:
+	Return value:
 
-        an osd_ticks_t value which represents the number of ticks per
-        second
+		an osd_ticks_t value which represents the number of ticks per
+		second
 -----------------------------------------------------------------------------*/
 osd_ticks_t osd_ticks_per_second();
 
 
 /*-----------------------------------------------------------------------------
-    osd_sleep: sleep for the specified time interval
+	osd_sleep: sleep for the specified time interval
 
-    Parameters:
+	Parameters:
 
-        duration - an osd_ticks_t value that specifies how long we should
-            sleep
+		duration - an osd_ticks_t value that specifies how long we should
+			sleep
 
-    Return value:
+	Return value:
 
-        None
+		None
 
-    Notes:
+	Notes:
 
-        The OSD layer should try to sleep for as close to the specified
-        duration as possible, or less. This is used as a mechanism to
-        "give back" unneeded time to other programs running in the system.
-        On a simple, non multitasking system, this routine can be a no-op.
-        If there is significant volatility in the amount of time that the
-        sleep occurs for, the OSD layer should strive to sleep for less time
-        than specified rather than sleeping too long.
+		The OSD layer should try to sleep for as close to the specified
+		duration as possible, or less. This is used as a mechanism to
+		"give back" unneeded time to other programs running in the system.
+		On a simple, non multitasking system, this routine can be a no-op.
+		If there is significant volatility in the amount of time that the
+		sleep occurs for, the OSD layer should strive to sleep for less time
+		than specified rather than sleeping too long.
 -----------------------------------------------------------------------------*/
 void osd_sleep(osd_ticks_t duration);
 
 /***************************************************************************
-    WORK ITEM INTERFACES
+	WORK ITEM INTERFACES
 ***************************************************************************/
 
 /* this is the maximum number of supported threads for a single work queue */
@@ -143,203 +144,203 @@ void osd_sleep(osd_ticks_t duration);
 #define WORK_QUEUE_FLAG_MULTI       0x0002
 #define WORK_QUEUE_FLAG_HIGH_FREQ   0x0004
 
-/* these flags can be set when queueing a work item to indicate how to handle
-   its deconstruction */
+   /* these flags can be set when queueing a work item to indicate how to handle
+	  its deconstruction */
 #define WORK_ITEM_FLAG_AUTO_RELEASE 0x0001
 
-/* osd_work_queue is an opaque type which represents a queue of work items */
+	  /* osd_work_queue is an opaque type which represents a queue of work items */
 struct osd_work_queue;
 
 /* osd_work_item is an opaque type which represents a single work item */
 struct osd_work_item;
 
 /* osd_work_callback is a callback function that does work */
-typedef void *(*osd_work_callback)(void *param, int threadid);
+typedef void* (*osd_work_callback)(void* param, int threadid);
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_queue_alloc: create a new work queue
+	osd_work_queue_alloc: create a new work queue
 
-    Parameters:
+	Parameters:
 
-        flags - one or more of the WORK_QUEUE_FLAG_* values ORed together:
+		flags - one or more of the WORK_QUEUE_FLAG_* values ORed together:
 
-            WORK_QUEUE_FLAG_IO - indicates that the work queue will do some
-                I/O; this may be a useful hint so that threads are created
-                even on single-processor systems since I/O can often be
-                overlapped with other work
+			WORK_QUEUE_FLAG_IO - indicates that the work queue will do some
+				I/O; this may be a useful hint so that threads are created
+				even on single-processor systems since I/O can often be
+				overlapped with other work
 
-            WORK_QUEUE_FLAG_MULTI - indicates that the work queue should
-                take advantage of as many processors as it can; items queued
-                here are assumed to be fully independent or shared
+			WORK_QUEUE_FLAG_MULTI - indicates that the work queue should
+				take advantage of as many processors as it can; items queued
+				here are assumed to be fully independent or shared
 
-            WORK_QUEUE_FLAG_HIGH_FREQ - indicates that items are expected
-                to be queued at high frequency and acted upon quickly; in
-                general, this implies doing some spin-waiting internally
-                before falling back to OS-specific synchronization
+			WORK_QUEUE_FLAG_HIGH_FREQ - indicates that items are expected
+				to be queued at high frequency and acted upon quickly; in
+				general, this implies doing some spin-waiting internally
+				before falling back to OS-specific synchronization
 
-    Return value:
+	Return value:
 
-        A pointer to an allocated osd_work_queue object.
+		A pointer to an allocated osd_work_queue object.
 
-    Notes:
+	Notes:
 
-        A work queue abstracts the notion of how potentially threaded work
-        can be performed. If no threading support is available, it is a
-        simple matter to execute the work items as they are queued.
+		A work queue abstracts the notion of how potentially threaded work
+		can be performed. If no threading support is available, it is a
+		simple matter to execute the work items as they are queued.
 -----------------------------------------------------------------------------*/
-osd_work_queue *osd_work_queue_alloc(int flags);
+osd_work_queue* osd_work_queue_alloc(int flags);
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_queue_items: return the number of pending items in the queue
+	osd_work_queue_items: return the number of pending items in the queue
 
-    Parameters:
+	Parameters:
 
-        queue - pointer to an osd_work_queue that was previously created via
-            osd_work_queue_alloc
+		queue - pointer to an osd_work_queue that was previously created via
+			osd_work_queue_alloc
 
-    Return value:
+	Return value:
 
-        The number of incomplete items remaining in the queue.
+		The number of incomplete items remaining in the queue.
 -----------------------------------------------------------------------------*/
-int osd_work_queue_items(osd_work_queue *queue);
+int osd_work_queue_items(osd_work_queue* queue);
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_queue_wait: wait for the queue to be empty
+	osd_work_queue_wait: wait for the queue to be empty
 
-    Parameters:
+	Parameters:
 
-        queue - pointer to an osd_work_queue that was previously created via
-            osd_work_queue_alloc
+		queue - pointer to an osd_work_queue that was previously created via
+			osd_work_queue_alloc
 
-        timeout - a timeout value in osd_ticks_per_second()
+		timeout - a timeout value in osd_ticks_per_second()
 
-    Return value:
+	Return value:
 
-        true if the queue is empty; false if the wait timed out before the
-        queue was emptied.
+		true if the queue is empty; false if the wait timed out before the
+		queue was emptied.
 -----------------------------------------------------------------------------*/
-bool osd_work_queue_wait(osd_work_queue *queue, osd_ticks_t timeout);
+bool osd_work_queue_wait(osd_work_queue* queue, osd_ticks_t timeout);
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_queue_free: free a work queue, waiting for all items to complete
+	osd_work_queue_free: free a work queue, waiting for all items to complete
 
-    Parameters:
+	Parameters:
 
-        queue - pointer to an osd_work_queue that was previously created via
-            osd_work_queue_alloc
+		queue - pointer to an osd_work_queue that was previously created via
+			osd_work_queue_alloc
 
-    Return value:
+	Return value:
 
-        None.
+		None.
 -----------------------------------------------------------------------------*/
-void osd_work_queue_free(osd_work_queue *queue);
+void osd_work_queue_free(osd_work_queue* queue);
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_item_queue_multiple: queue a set of work items
+	osd_work_item_queue_multiple: queue a set of work items
 
-    Parameters:
+	Parameters:
 
-        queue - pointer to an osd_work_queue that was previously created via
-            osd_work_queue_alloc
+		queue - pointer to an osd_work_queue that was previously created via
+			osd_work_queue_alloc
 
-        callback - pointer to a function that will do the work
+		callback - pointer to a function that will do the work
 
-        numitems - number of work items to queue
+		numitems - number of work items to queue
 
-        param - a void * parameter that can be used to pass data to the
-            function
+		param - a void * parameter that can be used to pass data to the
+			function
 
-        paramstep - the number of bytes to increment param by for each item
-            queued; for example, if you have an array of work_unit objects,
-            you can point param to the base of the array and set paramstep to
-            sizeof(work_unit)
+		paramstep - the number of bytes to increment param by for each item
+			queued; for example, if you have an array of work_unit objects,
+			you can point param to the base of the array and set paramstep to
+			sizeof(work_unit)
 
-        flags - one or more of the WORK_ITEM_FLAG_* values ORed together:
+		flags - one or more of the WORK_ITEM_FLAG_* values ORed together:
 
-            WORK_ITEM_FLAG_AUTO_RELEASE - indicates that the work item
-                should be automatically freed when it is complete
+			WORK_ITEM_FLAG_AUTO_RELEASE - indicates that the work item
+				should be automatically freed when it is complete
 
-    Return value:
+	Return value:
 
-        A pointer to the final allocated osd_work_item in the list.
+		A pointer to the final allocated osd_work_item in the list.
 
-    Notes:
+	Notes:
 
-        On single-threaded systems, this function may actually execute the
-        work item immediately before returning.
+		On single-threaded systems, this function may actually execute the
+		work item immediately before returning.
 -----------------------------------------------------------------------------*/
-osd_work_item *osd_work_item_queue_multiple(osd_work_queue *queue, osd_work_callback callback, int32_t numitems, void *parambase, int32_t paramstep, uint32_t flags);
+osd_work_item* osd_work_item_queue_multiple(osd_work_queue* queue, osd_work_callback callback, int32_t numitems, void* parambase, int32_t paramstep, uint32_t flags);
 
 
 /* inline helper to queue a single work item using the same interface */
-static inline osd_work_item *osd_work_item_queue(osd_work_queue *queue, osd_work_callback callback, void *param, uint32_t flags)
+static inline osd_work_item* osd_work_item_queue(osd_work_queue* queue, osd_work_callback callback, void* param, uint32_t flags)
 {
 	return osd_work_item_queue_multiple(queue, callback, 1, param, 0, flags);
 }
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_item_wait: wait for a work item to complete
+	osd_work_item_wait: wait for a work item to complete
 
-    Parameters:
+	Parameters:
 
-        item - pointer to an osd_work_item that was previously returned from
-            osd_work_item_queue
+		item - pointer to an osd_work_item that was previously returned from
+			osd_work_item_queue
 
-        timeout - a timeout value in osd_ticks_per_second()
+		timeout - a timeout value in osd_ticks_per_second()
 
-    Return value:
+	Return value:
 
-        true if the item completed; false if the wait timed out before the
-        item completed.
+		true if the item completed; false if the wait timed out before the
+		item completed.
 -----------------------------------------------------------------------------*/
-bool osd_work_item_wait(osd_work_item *item, osd_ticks_t timeout);
+bool osd_work_item_wait(osd_work_item* item, osd_ticks_t timeout);
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_item_result: get the result of a work item
+	osd_work_item_result: get the result of a work item
 
-    Parameters:
+	Parameters:
 
-        item - pointer to an osd_work_item that was previously returned from
-            osd_work_item_queue
+		item - pointer to an osd_work_item that was previously returned from
+			osd_work_item_queue
 
-    Return value:
+	Return value:
 
-        A void * that represents the work item's result.
+		A void * that represents the work item's result.
 -----------------------------------------------------------------------------*/
-void *osd_work_item_result(osd_work_item *item);
+void* osd_work_item_result(osd_work_item* item);
 
 
 /*-----------------------------------------------------------------------------
-    osd_work_item_release: release the memory allocated to a work item
+	osd_work_item_release: release the memory allocated to a work item
 
-    Parameters:
+	Parameters:
 
-        item - pointer to an osd_work_item that was previously returned from
-            osd_work_item_queue
+		item - pointer to an osd_work_item that was previously returned from
+			osd_work_item_queue
 
-    Return value:
+	Return value:
 
-        None.
+		None.
 
-    Notes:
+	Notes:
 
-        The osd_work_item exists until explicitly released, even if it has
-        long since completed. It is the queuer's responsibility to release
-        any work items it has queued.
+		The osd_work_item exists until explicitly released, even if it has
+		long since completed. It is the queuer's responsibility to release
+		any work items it has queued.
 -----------------------------------------------------------------------------*/
-void osd_work_item_release(osd_work_item *item);
+void osd_work_item_release(osd_work_item* item);
 
 
 
 /***************************************************************************
-    MISCELLANEOUS INTERFACES
+	MISCELLANEOUS INTERFACES
 ***************************************************************************/
 
 /// \brief Break into host debugger if attached
@@ -348,7 +349,7 @@ void osd_work_item_release(osd_work_item *item);
 /// attached, it should break and display the specified message.
 /// \param [in] message Message to output to the debugger as a
 ///   NUL-terminated string.
-void osd_break_into_debugger(const char *message);
+void osd_break_into_debugger(const char* message);
 
 
 /// \brief Get clipboard text
@@ -360,20 +361,20 @@ std::string osd_get_clipboard_text();
 
 
 /***************************************************************************
-    MIDI I/O INTERFACES
+	MIDI I/O INTERFACES
 ***************************************************************************/
 
 class osd_midi_device
 {
 public:
-	virtual ~osd_midi_device() { }
+	virtual ~osd_midi_device() {}
 	// free result with osd_close_midi_channel()
-	virtual bool open_input(const char *devname) = 0;
+	virtual bool open_input(const char* devname) = 0;
 	// free result with osd_close_midi_channel()
-	virtual bool open_output(const char *devname) = 0;
+	virtual bool open_output(const char* devname) = 0;
 	virtual void close() = 0;
 	virtual bool poll() = 0;
-	virtual int read(uint8_t *pOut) = 0;
+	virtual int read(uint8_t* pOut) = 0;
 	virtual void write(uint8_t data) = 0;
 };
 
@@ -382,15 +383,15 @@ void osd_list_network_adapters();
 
 
 /***************************************************************************
-    UNCATEGORIZED INTERFACES
+	UNCATEGORIZED INTERFACES
 ***************************************************************************/
 
 /*-----------------------------------------------------------------------------
-    osd_subst_env: substitute environment variables with values
+	osd_subst_env: substitute environment variables with values
 
-    Parameters:
+	Parameters:
 
-        src - source string
+		src - source string
 
 -----------------------------------------------------------------------------*/
 std::string osd_subst_env(std::string_view src);
@@ -398,8 +399,8 @@ std::string osd_subst_env(std::string_view src);
 class osd_gpu
 {
 public:
-	osd_gpu() { }
-	virtual ~osd_gpu() { }
+	osd_gpu() {}
+	virtual ~osd_gpu() {}
 
 	typedef uint64_t handle_t;
 
@@ -437,8 +438,8 @@ public:
 		class attr_entry
 		{
 		public:
-			attr_entry() : m_usage(POSITION), m_type(FLOAT32), m_count(3), m_size(12) { }
-			attr_entry(attr_usage usage, attr_type type, size_t count) : m_usage(usage), m_type(type), m_count(count), m_size(TYPE_SIZES[type] * count) { }
+			attr_entry() : m_usage(POSITION), m_type(FLOAT32), m_count(3), m_size(12) {}
+			attr_entry(attr_usage usage, attr_type type, size_t count) : m_usage(usage), m_type(type), m_count(count), m_size(TYPE_SIZES[type] * count) {}
 
 			attr_usage usage() const { return m_usage; }
 			attr_type type() const { return m_type; }
@@ -458,7 +459,7 @@ public:
 		{
 		}
 
-		vertex_decl & add_attr(attr_usage usage, attr_type type, size_t count)
+		vertex_decl& add_attr(attr_usage usage, attr_type type, size_t count)
 		{
 			m_entries[m_entry_count] = attr_entry(usage, type, count);
 			m_size += m_entries[m_entry_count].size();
@@ -468,7 +469,7 @@ public:
 
 		size_t entry_count() const { return m_entry_count; }
 		size_t size() const { return m_size; }
-		const attr_entry &entry(const uint32_t index) const { return m_entries[index]; }
+		const attr_entry& entry(const uint32_t index) const { return m_entries[index]; }
 
 	protected:
 		attr_entry m_entries[MAX_ATTRS];
@@ -479,14 +480,14 @@ public:
 	class vertex_buffer_interface
 	{
 	public:
-		vertex_buffer_interface(vertex_decl &decl, uint32_t flags)
+		vertex_buffer_interface(vertex_decl& decl, uint32_t flags)
 			: m_decl(decl)
 			, m_flags(flags)
 		{
 		}
 		virtual ~vertex_buffer_interface() {}
 
-		const vertex_decl &decl() const { return m_decl; }
+		const vertex_decl& decl() const { return m_decl; }
 		uint32_t flags() const { return m_flags; }
 		handle_t handle() { return m_handle; }
 
@@ -495,7 +496,7 @@ public:
 		virtual void upload() = 0;
 
 	protected:
-		const vertex_decl &m_decl;
+		const vertex_decl& m_decl;
 		const uint32_t m_flags;
 		handle_t m_handle;
 	};
@@ -508,23 +509,23 @@ public:
 			RETAIN_ON_CPU = 0x00000001
 		};
 
-		static_vertex_buffer_interface(vertex_decl &decl, size_t count, uint32_t flags)
+		static_vertex_buffer_interface(vertex_decl& decl, size_t count, uint32_t flags)
 			: vertex_buffer_interface(decl, flags)
 			, m_count(count)
-			, m_size(decl.size() * count)
+			, m_size(decl.size()* count)
 		{
 		}
 
 		virtual ~static_vertex_buffer_interface()
 		{
 			if (m_data)
-				delete [] m_data;
+				delete[] m_data;
 		}
 
 		size_t count() const override { return m_count; }
 		size_t size() const override { return m_size; }
 
-		void set_data(void *data)
+		void set_data(void* data)
 		{
 			allocate_if_needed();
 			memcpy(m_data, data, m_size);
@@ -539,11 +540,11 @@ public:
 
 		const size_t m_count;
 		const size_t m_size;
-		uint8_t *m_data;
+		uint8_t* m_data;
 	};
 
-	virtual void bind_buffer(vertex_buffer_interface *vb) = 0;
-	virtual void unbind_buffer(vertex_buffer_interface *vb) = 0;
+	virtual void bind_buffer(vertex_buffer_interface* vb) = 0;
+	virtual void unbind_buffer(vertex_buffer_interface* vb) = 0;
 };
 
 
@@ -565,31 +566,31 @@ enum osd_output_channel
 class osd_output
 {
 public:
-	osd_output() { }
-	virtual ~osd_output() { }
+	osd_output() {}
+	virtual ~osd_output() {}
 
-	virtual void output_callback(osd_output_channel channel, util::format_argument_pack<std::ostream> const &args) = 0;
+	virtual void output_callback(osd_output_channel channel, util::format_argument_pack<std::ostream> const& args) = 0;
 
-	static void push(osd_output *delegate);
-	static void pop(osd_output *delegate);
+	static void push(osd_output* delegate);
+	static void pop(osd_output* delegate);
 
 protected:
 
-	void chain_output(osd_output_channel channel, util::format_argument_pack<std::ostream> const &args) const
+	void chain_output(osd_output_channel channel, util::format_argument_pack<std::ostream> const& args) const
 	{
 		if (m_chain)
 			m_chain->output_callback(channel, args);
 	}
 
 private:
-	osd_output *m_chain = nullptr;
+	osd_output* m_chain = nullptr;
 };
 
-void osd_vprintf_error(util::format_argument_pack<std::ostream> const &args);
-void osd_vprintf_warning(util::format_argument_pack<std::ostream> const &args);
-void osd_vprintf_info(util::format_argument_pack<std::ostream> const &args);
-void osd_vprintf_verbose(util::format_argument_pack<std::ostream> const &args);
-void osd_vprintf_debug(util::format_argument_pack<std::ostream> const &args);
+void osd_vprintf_error(util::format_argument_pack<std::ostream> const& args);
+void osd_vprintf_warning(util::format_argument_pack<std::ostream> const& args);
+void osd_vprintf_info(util::format_argument_pack<std::ostream> const& args);
+void osd_vprintf_verbose(util::format_argument_pack<std::ostream> const& args);
+void osd_vprintf_debug(util::format_argument_pack<std::ostream> const& args);
 
 /// \brief Print error message
 ///
@@ -598,7 +599,7 @@ void osd_vprintf_debug(util::format_argument_pack<std::ostream> const &args);
 /// \param [in] fmt Message format string.
 /// \param [in] args Optional message format arguments.
 /// \sa util::string_format
-template <typename Format, typename... Params> void osd_printf_error(Format &&fmt, Params &&...args)
+template <typename Format, typename... Params> void osd_printf_error(Format&& fmt, Params &&...args)
 {
 	return osd_vprintf_error(util::make_format_argument_pack(std::forward<Format>(fmt), std::forward<Params>(args)...));
 }
@@ -610,7 +611,7 @@ template <typename Format, typename... Params> void osd_printf_error(Format &&fm
 /// \param [in] fmt Message format string.
 /// \param [in] args Optional message format arguments.
 /// \sa util::string_format
-template <typename Format, typename... Params> void osd_printf_warning(Format &&fmt, Params &&...args)
+template <typename Format, typename... Params> void osd_printf_warning(Format&& fmt, Params &&...args)
 {
 	return osd_vprintf_warning(util::make_format_argument_pack(std::forward<Format>(fmt), std::forward<Params>(args)...));
 }
@@ -622,9 +623,19 @@ template <typename Format, typename... Params> void osd_printf_warning(Format &&
 /// \param [in] fmt Message format string.
 /// \param [in] args Optional message format arguments.
 /// \sa util::string_format
-template <typename Format, typename... Params> void osd_printf_info(Format &&fmt, Params &&...args)
+template <typename Format, typename... Params> void osd_printf_info(Format&& fmt, Params &&...args)
 {
 	return osd_vprintf_info(util::make_format_argument_pack(std::forward<Format>(fmt), std::forward<Params>(args)...));
+}
+
+static std::set<int> memlocs;
+template <typename Format, typename... Params> void osd_printf_info_once_per_addr(int addr, Format&& fmt, Params &&...args)
+{
+	if (memlocs.find(addr) == memlocs.end())
+	{
+		memlocs.insert(addr);
+		osd_vprintf_info(util::make_format_argument_pack(std::forward<Format>(fmt), std::forward<Params>(args)...));
+	}
 }
 
 /// \brief Print verbose diagnostic message
@@ -637,7 +648,7 @@ template <typename Format, typename... Params> void osd_printf_info(Format &&fmt
 /// \param [in] fmt Message format string.
 /// \param [in] args Optional message format arguments.
 /// \sa util::string_format
-template <typename Format, typename... Params> void osd_printf_verbose(Format &&fmt, Params &&...args)
+template <typename Format, typename... Params> void osd_printf_verbose(Format&& fmt, Params &&...args)
 {
 	return osd_vprintf_verbose(util::make_format_argument_pack(std::forward<Format>(fmt), std::forward<Params>(args)...));
 }
@@ -651,7 +662,7 @@ template <typename Format, typename... Params> void osd_printf_verbose(Format &&
 /// \param [in] fmt Message format string.
 /// \param [in] args Optional message format arguments.
 /// \sa util::string_format
-template <typename Format, typename... Params> void osd_printf_debug(Format &&fmt, Params &&...args)
+template <typename Format, typename... Params> void osd_printf_debug(Format&& fmt, Params &&...args)
 {
 	return osd_vprintf_debug(util::make_format_argument_pack(std::forward<Format>(fmt), std::forward<Params>(args)...));
 }
@@ -660,7 +671,7 @@ template <typename Format, typename... Params> void osd_printf_debug(Format &&fm
 
 
 // returns command line arguments as an std::vector<std::string> in UTF-8
-std::vector<std::string> osd_get_command_line(int argc, char *argv[]);
+std::vector<std::string> osd_get_command_line(int argc, char* argv[]);
 
 /* discourage the use of printf directly */
 /* sadly, can't do this because of the ATTR_PRINTF under GCC */
