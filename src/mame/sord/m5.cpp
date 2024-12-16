@@ -323,8 +323,8 @@ protected:
 
 private:
 	u8 m_ram_mode;
-	u8 m_ram_type;
-	memory_region *m_cart_rom;
+	//u8 m_ram_type;
+	//memory_region *m_cart_rom;
 
 	// floppy state for fd5
 	u8 m_fd5_data;

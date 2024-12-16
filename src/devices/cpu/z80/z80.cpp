@@ -100,7 +100,7 @@
  *      timing loops. i think those hacks weren't endian safe before too.
  *   Changes in 2.4:
  *    - z80_reset zaps the entire context, sets IX and IY to 0xffff(!) and
- *      sets the Z flag. With these changes the Tehkan World Cup driver
+ *      sets the Z flag. With these changes the Thekan World Cup driver
  *      _seems_ to work again.
  *   Changes in 2.3:
  *    - External termination of the execution loop calls z80_burn() and
@@ -204,8 +204,9 @@ const char* addrOrSym(int addr)
 	if (it != vectorMap.end())
 		return it->second;
 
-	strcpy(adrorsymbuf, "$");
-	itoa(addr, adrorsymbuf, 16);
+	std::stringstream ss;
+	ss << "$" << std::hex << addr;
+	strcpy(adrorsymbuf, ss.str().c_str());
 	return adrorsymbuf;
 }
 
@@ -587,7 +588,7 @@ static const char* renderSymbolicAddress(int adrlo, bool& kpjs)
 	else if (adrlo >= 0xc0 && adrlo <= 0xdf) { strcpy(regsym, "IO_CTLSEL_JS"); kpjs = true; }
 	else if (adrlo >= 0xe0 && adrlo <= 0xff) strcpy(regsym, "IO_PSG");
 	else if (adrlo >= 0xa0 && adrlo <= 0xbf) { if ((adrlo & 1) == 1) strcpy(regsym, "IO_VDP_Addr"); else strcpy(regsym, "IO_VDP_Data"); }
-	else { strcpy(regsym, "$");	itoa(adrlo, regsym, 16); }
+	else { strcpy(regsym, addrOrSym(adrlo)); }
 
 	return regsym;
 }

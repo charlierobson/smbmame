@@ -2081,7 +2081,7 @@ void validity_checker::validate_roms(device_t &root)
 		u32 current_length = 0;
 		int items_since_region = 1;
 		int last_bios = 0, max_bios = 0;
-		int total_files = 0;
+		//int total_files = 0;
 		std::unordered_map<std::string, int> bios_names;
 		std::unordered_map<std::string, std::string> bios_descs;
 		char const *defbios = nullptr;
@@ -2152,7 +2152,7 @@ void validity_checker::validate_roms(device_t &root)
 			{
 				// track the last filename we found
 				last_name = romp->name;
-				total_files++;
+				//total_files++;
 				max_bios = std::max<int>(max_bios, ROM_GETBIOSFLAGS(romp));
 
 				// validate the name
