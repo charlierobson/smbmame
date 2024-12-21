@@ -7,6 +7,9 @@
 
 #include "machine/z80daisy.h"
 
+#include <set>
+
+
 enum
 {
 	NSC800_RSTA = INPUT_LINE_IRQ0 + 1,
@@ -27,6 +30,8 @@ enum
 	Z80_DC0, Z80_DC1, Z80_DC2, Z80_DC3, Z80_WZ
 };
 
+
+
 class z80_device : public cpu_device, public z80_daisy_chain_interface
 {
 public:
@@ -40,6 +45,10 @@ public:
 	auto refresh_cb() { return m_refresh_cb.bind(); }
 	auto nomreq_cb() { return m_nomreq_cb.bind(); }
 	auto halt_cb() { return m_halt_cb.bind(); }
+
+	u32 pc() { return m_pc.d; }
+
+	class Translator* m_trans;
 
 protected:
 	z80_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
@@ -165,11 +174,11 @@ protected:
 	void pop(PAIR &r);
 	void push(PAIR &r);
 	void jp(void);
-	void jp_cond(bool cond);
+	void jp_cond(bool cond, const char* condcode);
 	void jr();
 	void jr_cond(bool cond, uint8_t opcode);
 	void call();
-	void call_cond(bool cond, uint8_t opcode);
+	void call_cond(bool cond, uint8_t opcode, const char* condcode);
 	void ret_cond(bool cond, uint8_t opcode);
 	void retn();
 	void reti();
@@ -317,6 +326,103 @@ protected:
 };
 
 DECLARE_DEVICE_TYPE(NSC800, nsc800_device)
+
+
+
+
+
+
+
+class Translator
+{
+public:
+	Translator(z80_device* z80, const char* opts) :
+		_z80(z80)
+	{
+		std::string m5c_opts(opts);
+
+		_remap67 = m5c_opts.find("remap67") != -1;
+		_remapIn = m5c_opts.find("remapIn") != -1;
+		_remapOut = m5c_opts.find("remapOut") != -1;
+
+		_logVDP = m5c_opts.find("logVDP") != -1;
+
+		if (m5c_opts.find("remapAll") != -1) {
+			_remap67 = true;
+			_remapIn = true;
+			_remapOut = true;
+		}
+	}
+
+	// virtual void On_InAN(uint16_t port) {}
+	// virtual void On_InRC(char reg) {}
+	// virtual void On_InIDx(void) {}
+
+	// virtual void On_OutNA(uint16_t port) {}
+	// virtual void On_OutCR(char reg) {}
+	// virtual void On_OutIDx(void) {}
+
+	virtual int On_Call(int addr) { return addr; }
+	virtual int On_CallConditional(int addr, const char* conditioncode) { return addr; }
+
+	virtual int On_Jump(int addr) { return addr; }
+	virtual void On_JumpIndirect(int target, const char* instruction, int extraOps) {}
+	virtual int On_JumpConditional(int addr, const char* conditioncode) { return addr; }
+
+	// virtual uint16_t On_RD(uint16_t addr) { return 0; }
+	// virtual uint16_t On_WR(uint16_t addr) { return 0; }
+
+	virtual std::string SymbolForAddress(int addr) { return ""; }
+
+	virtual void PrintPatchConditional(int addr, const char* opcode, const char* condition, const char* argument, int size) {}
+
+	virtual void PrintPatch(int addr, const char* opcode, const char* argument, int size) {}
+
+	virtual inline int PC() { return _z80->pc(); }
+	virtual inline int PC(int offset) { return PC() + offset; }
+
+	void CheckOut(int pc, const char* instr)
+	{
+		if (HasVisited(pc) && !IsExecutingGameROM(pc))
+		 	return;
+
+		Visit(pc);
+		osd_printf_info("; $%04x - Check this out: %s\n", pc, instr);
+	}
+
+	bool Visit(int addr)
+	{
+		bool alreadyVisited = _visited.find(addr) != _visited.end();
+		_visited.insert(addr);
+		return alreadyVisited;
+	}
+
+	bool HasVisited(int addr)
+	{
+		return _visited.find(addr) != _visited.end();
+	}
+
+	bool IsExecutingGameROM(int addr)
+	{
+		return addr > 0x7fff && addr < 0xe000;
+	}
+
+	bool AddrIsInBIOS(int addr)
+	{
+		return addr < 0x2000;
+	}
+
+protected:
+	z80_device* _z80;
+
+	std::set<int> _visited;
+
+	bool _remap67 = false;
+	bool _remapIn = false;
+	bool _remapOut = false;
+	bool _logVDP = false;
+};
+
 
 
 #endif // MAME_CPU_Z80_Z80_H

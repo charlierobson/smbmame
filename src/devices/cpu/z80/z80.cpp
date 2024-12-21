@@ -126,110 +126,407 @@
 
 #include <emuopts.h>
 
-#define VERBOSE             0
-
-static const int BIOSBASE = 0xe000;
-
 #include <map>
 #include <string>
 
-static std::map<int, const char*> vectorMap =
+#define VERBOSE 0
+
+
+
+class ColecoToM5Translator : public Translator
 {
-	{ 0xFF61, "V_PLAY_SONGS"},
-	{ 0xFF64, "V_ACTIVATEP"},
-	{ 0xFF67, "V_PUTOBJP" },
-	{ 0xFF6A, "V_REFLECT_VERTICAL" },
-	{ 0xFF6D, "V_REFLECT_HORIZONTAL" },
-	{ 0xFF70, "V_ROTATE_90" },
-	{ 0xFF73, "V_ENLARGE" },
-	{ 0xFF76, "V_CONTROLLER_SCAN" },
-	{ 0xFF79, "V_DECODER" },
-	{ 0xFF7C, "V_GAME_OPT" },
-	{ 0xFF7F, "V_LOAD_ASCII" },
-	{ 0xFF82, "V_FILL_VRAM" },
-	{ 0xFF85, "V_MODE_1" },
-	{ 0xFF88, "V_UPDATE_SPINNER" },
-	{ 0xFF8B, "V_INIT_TABLEP" },
-	{ 0xFF8E, "V_GET_VRAMP" },
-	{ 0xFF91, "V_PUT_VRAMP" },
-	{ 0xFF94, "V_INIT_SPR_ORDERP" },
-	{ 0xFF97, "V_WR_SPR_NM_TBLP" },
-	{ 0xFF9A, "V_INIT_TIMERP" },
-	{ 0xFF9D, "V_FREE_SIGNALP" },
-	{ 0xFFA0, "V_REQUEST_SIGNALP" },
-	{ 0xFFA3, "V_TEST_SIGNALP" },
-	{ 0xFFA6, "V_WRITE_REGISTERP" },
-	{ 0xFFA9, "V_WRITE_VRAMP" },
-	{ 0xFFAC, "V_READ_VRAMP" },
-	{ 0xFFAF, "V_INIT_WRITERP" },
-	{ 0xFFB2, "V_SOUND_INITP" },
-	{ 0xFFB5, "V_PLAY_ITP" },
-	{ 0xFFB8, "V_INIT_TABLE" },
-	{ 0xFFBB, "V_GET_VRAM" },
-	{ 0xFFBE, "V_PUT_VRAM" },
-	{ 0xFFC1, "V_INIT_SPR_ORDER" },
-	{ 0xFFC4, "V_WR_SPR_NM_TBL" },
-	{ 0xFFC7, "V_INIT_TIMER" },
-	{ 0xFFCA, "V_FREE_SIGNAL" },
-	{ 0xFFCD, "V_REQUEST_SIGNAL" },
-	{ 0xFFD0, "V_TEST_SIGNAL" },
-	{ 0xFFD3, "V_TIME_MGR" },
-	{ 0xFFD6, "V_TURN_OFF_SOUND" },
-	{ 0xFFD9, "V_WRITE_REGISTER" },
-	{ 0xFFDC, "V_READ_REGISTER" },
-	{ 0xFFDF, "V_WRITE_VRAM" },
-	{ 0xFFE2, "V_READ_VRAM" },
-	{ 0xFFE5, "V_INIT_WRITER" },
-	{ 0xFFE8, "V_WRITER" },
-	{ 0xFFEB, "V_POLLER" },
-	{ 0xFFEE, "V_SOUND_INIT" },
-	{ 0xFFF1, "V_PLAY_IT" },
-	{ 0xFFF4, "V_SOUND_MAN" },
-	{ 0xFFF7, "V_ACTIVATE" },
-	{ 0xFFFA, "V_PUTOBJ" },
-	{ 0xFFFD, "V_RAND_GEN" },
-	{ 0xf0f0, "CRV_JS1" },
-	{ 0xf0f3, "CRV_JS2" },
-	{ 0xf0f6, "CRV_KP1" },
-	{ 0xf0f9, "CRV_KP2" },
-	{ 0xf0fc, "CRV_BT1" },
-	{ 0xf0ff, "CRV_BT2" }
+public:
+	ColecoToM5Translator(z80_device* z80, const char* opts) : Translator(z80, opts)
+	{
+	}
+
+	int On_Call(int callAddr)
+	{
+		auto pc = PC(-3);
+		bool callShouldBeRemapped = (AddrIsInBIOS(callAddr) && IsExecutingGameROM(pc));
+		int remappedAddr = callAddr + (callShouldBeRemapped ? 0xe000 : 0);
+
+		if (!HasVisited(pc) && callShouldBeRemapped)
+		{
+			Visit(pc);
+			PrintPatch(pc, "call", SymbolForAddress(remappedAddr).c_str(), 3);
+			return remappedAddr;
+		}
+
+		return callAddr;
+	}
+
+	int On_CallConditional(int callAddr, const char* conditioncode)
+	{
+		auto pc = PC(-4);
+		bool callShouldBeRemapped = (AddrIsInBIOS(callAddr) && IsExecutingGameROM(pc));
+		int remappedAddr = callAddr + (callShouldBeRemapped ? 0xe000 : 0);
+
+		if (!HasVisited(pc) && callShouldBeRemapped)
+		{
+			Visit(pc);
+			PrintPatchConditional(pc, "call", conditioncode, SymbolForAddress(remappedAddr).c_str(), 3);
+			return remappedAddr;
+		}
+
+		return callAddr;
+	}
+
+	virtual int On_Jump(int jumpAddr)
+	{
+		auto pc = PC(-3);
+		bool callShouldBeRemapped = (AddrIsInBIOS(jumpAddr) && IsExecutingGameROM(pc));
+		int remappedAddr = jumpAddr + (callShouldBeRemapped ? 0xe000 : 0);
+
+		if (!HasVisited(pc) && callShouldBeRemapped)
+		{
+			Visit(pc);
+			PrintPatch(pc, "jp", SymbolForAddress(remappedAddr).c_str(), 3);
+			return remappedAddr;
+		}
+
+		return jumpAddr;
+	}
+
+	virtual int On_JumpConditional(int jumpAddr, const char* conditioncode)
+	{
+		auto pc = PC(-3);
+		bool callShouldBeRemapped = (AddrIsInBIOS(jumpAddr) && IsExecutingGameROM(pc));
+		int remappedAddr = jumpAddr + (callShouldBeRemapped ? 0xe000 : 0);
+
+		if (!HasVisited(pc) && callShouldBeRemapped)
+		{
+			Visit(pc);
+			PrintPatchConditional(pc, "jp", conditioncode, SymbolForAddress(remappedAddr).c_str(), 3);
+			return remappedAddr;
+		}
+
+		return jumpAddr;
+	}
+
+	virtual void On_JumpIndirect(int jumpAddr, const char* instruction, int extraOps)
+	{
+		auto pc = PC(-extraOps);
+
+		if (HasVisited(pc) || !IsExecutingGameROM(pc))
+			return;
+
+		std::stringstream ss;
+		ss << instruction << " -> $" << std::hex << jumpAddr;
+
+		CheckOut(pc, ss.str().c_str());
+	}
+
+	std::string SymbolForAddress(int addr)
+	{
+		auto it = vectorMap.find(addr);
+		if (it != vectorMap.end())
+		{
+			return it->second;
+		}
+
+		std::stringstream ss;
+		ss << "$" << std::hex << addr;
+		return ss.str();
+	}
+
+	void PrintPatchConditional(int pc, const char* opcode, const char* condition, const char* argument, int size)
+	{
+		osd_printf_info("PATCH($%04x,3)\n\t%s\t%s,%s\nENDPATCH($%04x,3)\n\n", pc, opcode, condition, argument, pc);
+	}
+
+	void PrintPatch(int pc, const char* opcode, const char* argument, int size)
+	{
+		osd_printf_info("PATCH($%04x,3)\n\t%s\t%s\nENDPATCH($%04x,3)\n\n", pc, opcode, argument, pc);
+	}
+
+private:
+	std::map<int, const char*> vectorMap =
+	{
+		{ 0xFF61, "V_PLAY_SONGS"},
+		{ 0xFF64, "V_ACTIVATEP"},
+		{ 0xFF67, "V_PUTOBJP" },
+		{ 0xFF6A, "V_REFLECT_VERTICAL" },
+		{ 0xFF6D, "V_REFLECT_HORIZONTAL" },
+		{ 0xFF70, "V_ROTATE_90" },
+		{ 0xFF73, "V_ENLARGE" },
+		{ 0xFF76, "V_CONTROLLER_SCAN" },
+		{ 0xFF79, "V_DECODER" },
+		{ 0xFF7C, "V_GAME_OPT" },
+		{ 0xFF7F, "V_LOAD_ASCII" },
+		{ 0xFF82, "V_FILL_VRAM" },
+		{ 0xFF85, "V_MODE_1" },
+		{ 0xFF88, "V_UPDATE_SPINNER" },
+		{ 0xFF8B, "V_INIT_TABLEP" },
+		{ 0xFF8E, "V_GET_VRAMP" },
+		{ 0xFF91, "V_PUT_VRAMP" },
+		{ 0xFF94, "V_INIT_SPR_ORDERP" },
+		{ 0xFF97, "V_WR_SPR_NM_TBLP" },
+		{ 0xFF9A, "V_INIT_TIMERP" },
+		{ 0xFF9D, "V_FREE_SIGNALP" },
+		{ 0xFFA0, "V_REQUEST_SIGNALP" },
+		{ 0xFFA3, "V_TEST_SIGNALP" },
+		{ 0xFFA6, "V_WRITE_REGISTERP" },
+		{ 0xFFA9, "V_WRITE_VRAMP" },
+		{ 0xFFAC, "V_READ_VRAMP" },
+		{ 0xFFAF, "V_INIT_WRITERP" },
+		{ 0xFFB2, "V_SOUND_INITP" },
+		{ 0xFFB5, "V_PLAY_ITP" },
+		{ 0xFFB8, "V_INIT_TABLE" },
+		{ 0xFFBB, "V_GET_VRAM" },
+		{ 0xFFBE, "V_PUT_VRAM" },
+		{ 0xFFC1, "V_INIT_SPR_ORDER" },
+		{ 0xFFC4, "V_WR_SPR_NM_TBL" },
+		{ 0xFFC7, "V_INIT_TIMER" },
+		{ 0xFFCA, "V_FREE_SIGNAL" },
+		{ 0xFFCD, "V_REQUEST_SIGNAL" },
+		{ 0xFFD0, "V_TEST_SIGNAL" },
+		{ 0xFFD3, "V_TIME_MGR" },
+		{ 0xFFD6, "V_TURN_OFF_SOUND" },
+		{ 0xFFD9, "V_WRITE_REGISTER" },
+		{ 0xFFDC, "V_READ_REGISTER" },
+		{ 0xFFDF, "V_WRITE_VRAM" },
+		{ 0xFFE2, "V_READ_VRAM" },
+		{ 0xFFE5, "V_INIT_WRITER" },
+		{ 0xFFE8, "V_WRITER" },
+		{ 0xFFEB, "V_POLLER" },
+		{ 0xFFEE, "V_SOUND_INIT" },
+		{ 0xFFF1, "V_PLAY_IT" },
+		{ 0xFFF4, "V_SOUND_MAN" },
+		{ 0xFFF7, "V_ACTIVATE" },
+		{ 0xFFFA, "V_PUTOBJ" },
+		{ 0xFFFD, "V_RAND_GEN" },
+		{ 0xf0f0, "CRV_JS1" },
+		{ 0xf0f3, "CRV_JS2" },
+		{ 0xf0f6, "CRV_KP1" },
+		{ 0xf0f9, "CRV_KP2" },
+		{ 0xf0fc, "CRV_BT1" },
+		{ 0xf0ff, "CRV_BT2" }
+	};
 };
 
-static char adrorsymbuf[1024];
-
-const char* addrOrSym(int addr)
+/*
+On_Jump(int addr)
 {
-	auto it = vectorMap.find(addr);
-	if (it != vectorMap.end())
-		return it->second;
+	reportCall(m_pc.d - 3, dest);
 
-	std::stringstream ss;
-	ss << "$" << std::hex << addr;
-	strcpy(adrorsymbuf, ss.str().c_str());
-	return adrorsymbuf;
+	auto pc = PCD - 3;
+	if (pc >= 0x8000 && pc < 0xE000 && dest < 0x2000) {
+		auto it = std::find(vects.begin(), vects.end(), pc);
+		if (it == vects.end()) {
+			vects.insert(pc);
+			osd_printf_info("PATCH($%04x,3)\n    jp %s\nENDPATCH($%04x,3)\n\n", pc, addrOrSym(dest + BIOSBASE), pc);
+		}
+		if (remap67)
+			dest += BIOSBASE;
+	}
+}
+ON_CALL(int addr)
+{
+	reportCall(m_pc.d - 3, m_ea);
+
+	auto pcd = m_ea;
+	auto pc = PCD - 3;
+	if (pc >= 0x8000 && pc < 0xE000 && pcd < 0x2000) {
+		auto it = std::find(vects.begin(), vects.end(), pc);
+		if (it == vects.end()) {
+			vects.insert(pc);
+			osd_printf_info("PATCH($%04x,3)\n    call %s\nENDPATCH($%04x,3)\n\n", pc, addrOrSym(pcd + BIOSBASE), pc);
+		}
+		if (remap67)
+			pcd += BIOSBASE;
+	}
+}
+private:
+	const int BIOSBASE = 0xe000;
+
+
+
+void rdmem()
+{
+	if (addr >= 0x6000 && addr < 0x7000 && m_pc.d > 0x8000) {
+		auto it = std::find(wrs.begin(), wrs.end(), m_pc.d);
+		if (it == wrs.end()) {
+			wrs.insert(m_pc.d);
+			osd_printf_info("; read from $%04x @~$%04x\n", addr, m_pc.d);
+		}
+
+		if (remap67)
+			addr += 0x1000;
+	}
+
+	//if (addr < 0x2000 && m_pc.d > 0x8000) {
+	//	osd_printf_info("remappedad from $%04x to $%04x @~$%04x\n", addr, addr+0xe000, m_pc.d);
+	//	if (remap67)
+	//		addr += 0xe000;
+	//}
+
+
 }
 
-//if (adrlo >= 0x80 && adrlo <= 0x9f) strcpy(regsym, "IO_CTLSEL_KP");
-//else if (adrlo >= 0xc0 && adrlo <= 0xdf) strcpy(regsym, "IO_CTLSEL_JS");
-//else if (adrlo >= 0xe0 && adrlo <= 0xff) strcpy(regsym, "IO_PSG");
-//else if (adrlo >= 0xa0 && adrlo <= 0xbf) { if ((adrlo & 1) == 1) strcpy(regsym, "IO_VDP_Addr"); else strcpy(regsym, "IO_VDP_Data"); }
-//else {  }
-//
+static char regsym[1024];
+
+bool remap67;
+bool remapIn;
+bool remapOut;
+
+std::set<int> outpoots;
+uint8_t prevValue = 0;
+
+bool latch;
+
+bool logvdp = false;
+
+static const char* renderSymbolicAddress(int adrlo, bool& kpjs)
+{
+	// 80-9F (W) = Set both controllers to keypad mode
+	// A0-BF (W) = Video Chip (TMS9928A), A0=0 -> Write Register 0 , A0=1 -> Write Register 1
+	// C0-DF (W) = Set both controllers to joystick mode
+	// E0-FF (W) = Sound Chip (SN76489A)
+
+	if (adrlo >= 0x80 && adrlo <= 0x9f) { strcpy(regsym, "IO_CTLSEL_KP"); kpjs = true; }
+	else if (adrlo >= 0xc0 && adrlo <= 0xdf) { strcpy(regsym, "IO_CTLSEL_JS"); kpjs = true; }
+	else if (adrlo >= 0xe0 && adrlo <= 0xff) strcpy(regsym, "IO_PSG");
+	else if (adrlo >= 0xa0 && adrlo <= 0xbf) { if ((adrlo & 1) == 1) strcpy(regsym, "IO_VDP_Addr"); else strcpy(regsym, "IO_VDP_Data"); }
+	else { strcpy(regsym, addrOrSym(adrlo)); }
+
+	return regsym;
+}
+
+static void reportOnce(int pcd, const char* instr)
+{
+	if (pcd < 0x8000 || pcd > 0xdfff)
+		return;
+
+	auto it = std::find(outpoots.begin(), outpoots.end(), pcd);
+	if (it != outpoots.end())
+		return;
+	outpoots.insert(pcd);
+	osd_printf_info("; $%04x %s\n\n", pcd, instr);
+
+}
+
+void z80_device::informin(uint16_t port, uint8_t value, const char* opcodedesc)
+{
+	auto adrlo = port & 0xff;
+	if (adrlo < 0x80)
+		return;
+
+	auto pc = m_pc.d - 2;
+	if (pc < 0x8000 || pc > 0xdfff)
+		return;
+
+	auto it = std::find(outpoots.begin(), outpoots.end(), PCD);
+	if (it != outpoots.end())
+		return;
+
+	outpoots.insert(PCD);
+
+	bool kpjs = false;
+	const char* regsym = renderSymbolicAddress(adrlo, kpjs);
+
+	if (strcmp(opcodedesc, "a,(n)") == 0)
+	{
+		// we can generate a patch from this
+		// kp/js requires manual patching
+
+		if (!kpjs)
+			osd_printf_info("PATCH($%04x,2)\n    in a,(%s)\nENDPATCH($%04x,2)\n\n", pc, regsym, pc);
+		else
+			osd_printf_info("; $%04x IN a,(%s) ; kp/js needs manual patch\n\n", pc, regsym);
+
+		if (!remapIn)
+			return;
+
+		if (adrlo >= 0xa0 && adrlo <= 0xbf) {
+			// VDP
+			port = (port & 0xff00) + 0x10 + (adrlo & 1);
+		}
+		if (adrlo >= 0xe0 && adrlo <= 0xff) {
+			// SN
+			port = 0x20;
+		}
+	}
+	else
+	{
+		// manual intervention required
+		osd_printf_info("; $%04x IN %s (port = %s)\n\n", pc, opcodedesc, regsym);
+	}
+}
+
+void z80_device::informout(uint16_t port, uint8_t value, const char* opcodedesc)
+{
+	auto adrlo = port & 0xff;
+	auto pc = PCD - 2;
+
+	// log vdp writes
+	if (adrlo == 0x11 && logvdp) {
+		if (latch && (value & 0xf8) == 0x80)
+			osd_printf_info("; reg %02x = %02x @%04x\n", value & 0x7f, prevValue, pc);
+		prevValue = value;
+		latch = !latch;
+		return;
+	}
+	if (adrlo < 0x80)
+		return;
+
+	if (pc < 0x8000 || pc > 0xdfff)
+		return;
+
+	auto it = std::find(outpoots.begin(), outpoots.end(), PCD);
+	if (it != outpoots.end())
+		return;
+
+	outpoots.insert(PCD);
+
+	bool kpjs = false;
+	const char* regsym = renderSymbolicAddress(adrlo, kpjs);
+
+	if (strcmp(opcodedesc, "(n),a") == 0)
+	{
+		// we can generate a patch from this
+		// kp/js requires manual patching
+
+		if (!kpjs)
+			osd_printf_info("PATCH($%04x,2)\n    out (%s),a\nENDPATCH($%04x,2)\n\n", pc, regsym, pc);
+		else
+			osd_printf_info("; $%04x OUT %s (port = %s, val = $%02x)\n\n", pc, opcodedesc, regsym, value);
+
+		if (adrlo >= 0xa0 && adrlo <= 0xbf && remapOut) {
+			port = (port & 0xff00) + 0x10 + (adrlo & 1);
+		}
+		if (adrlo >= 0xe0 && adrlo <= 0xff && remapOut) {
+			port = 0x20;
+		}
+	}
+	else
+	{
+		osd_printf_info("; $%04x OUT %s (port = %s, val = $%02x)\n\n", pc, opcodedesc, regsym, value);
+	}
+}
+
+	static void reportCall(long pc, long target) {
+		//if (pc > 0x8000 && target < 0x2000) {
+		//	osd_printf_info("CALL/JP to %04x from $%04x\n", target, pc);
+		//}
+	}
+
+	//if (adrlo >= 0x80 && adrlo <= 0x9f) strcpy(regsym, "IO_CTLSEL_KP");
+	//else if (adrlo >= 0xc0 && adrlo <= 0xdf) strcpy(regsym, "IO_CTLSEL_JS");
+	//else if (adrlo >= 0xe0 && adrlo <= 0xff) strcpy(regsym, "IO_PSG");
+	//else if (adrlo >= 0xa0 && adrlo <= 0xbf) { if ((adrlo & 1) == 1) strcpy(regsym, "IO_VDP_Addr"); else strcpy(regsym, "IO_VDP_Data"); }
+	//else {  }
+	//
+};
+*/
+
 
 /* On an NMOS Z80, if LD A,I or LD A,R is interrupted, P/V flag gets reset,
    even if IFF2 was set before this instruction. This issue was fixed on
    the CMOS Z80, so until knowing (most) Z80 types on hardware, it's disabled */
 #define HAS_LDAIR_QUIRK     0
 
-#define LOG(x)  do { if (VERBOSE) logerror x; } while (0)
-
-static void reportCall(long pc, long target) {
-	//if (pc > 0x8000 && target < 0x2000) {
-	//	osd_printf_info("CALL/JP to %04x from $%04x\n", target, pc);
-	//}
-}
-
+#define LOG(x)  //x
 
 /****************************************************************************/
 /* The Z80 registers. halt is set to 1 when the CPU is halted, the refresh  */
@@ -539,121 +836,6 @@ inline void z80_device::leave_halt()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//#define SORD
-#define COLECOCONV
-
-static char regsym[1024];
-
-bool remap67;
-bool remapIn;
-bool remapOut;
-
-std::set<int> outpoots;
-uint8_t prevValue = 0;
-
-bool latch;
-
-bool logvdp = false;
-
-static const char* renderSymbolicAddress(int adrlo, bool& kpjs)
-{
-	// 80-9F (W) = Set both controllers to keypad mode
-	// A0-BF (W) = Video Chip (TMS9928A), A0=0 -> Write Register 0 , A0=1 -> Write Register 1
-	// C0-DF (W) = Set both controllers to joystick mode
-	// E0-FF (W) = Sound Chip (SN76489A)
-
-	if (adrlo >= 0x80 && adrlo <= 0x9f) { strcpy(regsym, "IO_CTLSEL_KP"); kpjs = true; }
-	else if (adrlo >= 0xc0 && adrlo <= 0xdf) { strcpy(regsym, "IO_CTLSEL_JS"); kpjs = true; }
-	else if (adrlo >= 0xe0 && adrlo <= 0xff) strcpy(regsym, "IO_PSG");
-	else if (adrlo >= 0xa0 && adrlo <= 0xbf) { if ((adrlo & 1) == 1) strcpy(regsym, "IO_VDP_Addr"); else strcpy(regsym, "IO_VDP_Data"); }
-	else { strcpy(regsym, addrOrSym(adrlo)); }
-
-	return regsym;
-}
-
-static void reportOnce(int pcd, const char* instr)
-{
-	if (pcd < 0x8000 || pcd > 0xdfff)
-		return;
-
-	auto it = std::find(outpoots.begin(), outpoots.end(), pcd);
-	if (it != outpoots.end())
-		return;
-	outpoots.insert(pcd);
-	osd_printf_info("; $%04x %s\n\n", pcd, instr);
-
-}
-
-void z80_device::informin(uint16_t port, uint8_t value, const char* opcodedesc)
-{
-	auto adrlo = port & 0xff;
-	if (adrlo < 0x80)
-		return;
-
-	auto pc = m_pc.d - 2;
-	if (pc < 0x8000 || pc > 0xdfff)
-		return;
-
-	auto it = std::find(outpoots.begin(), outpoots.end(), PCD);
-	if (it != outpoots.end())
-		return;
-
-	outpoots.insert(PCD);
-
-	bool kpjs = false;
-	const char* regsym = renderSymbolicAddress(adrlo, kpjs);
-
-	if (strcmp(opcodedesc, "a,(n)") == 0)
-	{
-		// we can generate a patch from this
-		// kp/js requires manual patching
-
-		if (!kpjs)
-			osd_printf_info("PATCH($%04x,2)\n    in a,(%s)\nENDPATCH($%04x,2)\n\n", pc, regsym, pc);
-		else
-			osd_printf_info("; $%04x IN a,(%s) ; kp/js needs manual patch\n\n", pc, regsym);
-
-		if (!remapIn)
-			return;
-
-		if (adrlo >= 0xa0 && adrlo <= 0xbf) {
-			// VDP
-			port = (port & 0xff00) + 0x10 + (adrlo & 1);
-		}
-		if (adrlo >= 0xe0 && adrlo <= 0xff) {
-			// SN
-			port = 0x20;
-		}
-	}
-	else
-	{
-		// manual intervention required
-		osd_printf_info("; $%04x IN %s (port = %s)\n\n", pc, opcodedesc, regsym);
-	}
-}
-
 /***************************************************************
  * Input a byte from given I/O port
  ***************************************************************/
@@ -662,58 +844,6 @@ inline uint8_t z80_device::in(uint16_t port)
 	u8 res = m_io.read_byte(port);
 	T(4);
 	return res;
-}
-
-
-void z80_device::informout(uint16_t port, uint8_t value, const char* opcodedesc)
-{
-	auto adrlo = port & 0xff;
-	auto pc = PCD - 2;
-
-	// log vdp writes
-	if (adrlo == 0x11 && logvdp) {
-		if (latch && (value & 0xf8) == 0x80)
-			osd_printf_info("; reg %02x = %02x @%04x\n", value & 0x7f, prevValue, pc);
-		prevValue = value;
-		latch = !latch;
-		return;
-	}
-	if (adrlo < 0x80)
-		return;
-
-	if (pc < 0x8000 || pc > 0xdfff)
-		return;
-
-	auto it = std::find(outpoots.begin(), outpoots.end(), PCD);
-	if (it != outpoots.end())
-		return;
-
-	outpoots.insert(PCD);
-
-	bool kpjs = false;
-	const char* regsym = renderSymbolicAddress(adrlo, kpjs);
-
-	if (strcmp(opcodedesc, "(n),a") == 0)
-	{
-		// we can generate a patch from this
-		// kp/js requires manual patching
-
-		if (!kpjs)
-			osd_printf_info("PATCH($%04x,2)\n    out (%s),a\nENDPATCH($%04x,2)\n\n", pc, regsym, pc);
-		else
-			osd_printf_info("; $%04x OUT %s (port = %s, val = $%02x)\n\n", pc, opcodedesc, regsym, value);
-
-		if (adrlo >= 0xa0 && adrlo <= 0xbf && remapOut) {
-			port = (port & 0xff00) + 0x10 + (adrlo & 1);
-		}
-		if (adrlo >= 0xe0 && adrlo <= 0xff && remapOut) {
-			port = 0x20;
-		}
-	}
-	else
-	{
-		osd_printf_info("; $%04x OUT %s (port = %s, val = $%02x)\n\n", pc, opcodedesc, regsym, value);
-	}
 }
 
 /***************************************************************
@@ -725,30 +855,12 @@ inline void z80_device::out(uint16_t port, uint8_t value)
 }
 
 
-std::set<int> wrs;
 
 /***************************************************************
  * Read a byte from given memory location
  ***************************************************************/
 uint8_t z80_device::rm(uint16_t addr)
 {
-	if (addr >= 0x6000 && addr < 0x7000 && m_pc.d > 0x8000) {
-		auto it = std::find(wrs.begin(), wrs.end(), m_pc.d);
-		if (it == wrs.end()) {
-			wrs.insert(m_pc.d);
-			osd_printf_info("; read from $%04x @~$%04x\n", addr, m_pc.d);
-		}
-
-		if (remap67)
-			addr += 0x1000;
-	}
-
-	//if (addr < 0x2000 && m_pc.d > 0x8000) {
-	//	osd_printf_info("remappedad from $%04x to $%04x @~$%04x\n", addr, addr+0xe000, m_pc.d);
-	//	if (remap67)
-	//		addr += 0xe000;
-	//}
-
 	u8 res = m_data.read_byte(addr);
 	T(MTM);
 	return res;
@@ -776,17 +888,6 @@ inline void z80_device::rm16(uint16_t addr, PAIR& r)
  ***************************************************************/
 void z80_device::wm(uint16_t addr, uint8_t value)
 {
-	if (addr >= 0x6000 && addr < 0x7000 && m_pc.d > 0x8000) {
-		auto it = std::find(wrs.begin(), wrs.end(), m_pc.d);
-		if (it == wrs.end()) {
-			wrs.insert(m_pc.d);
-			osd_printf_info("; write to $%04x @~$%04x\n", addr, m_pc.d);
-		}
-
-		if (remap67)
-			addr += 0x1000;
-	}
-
 	// As we don't count changes between read and write, simply adjust to the end of requested.
 	if (m_icount_executing != MTM) T(m_icount_executing - MTM);
 	m_data.write_byte(addr, value);
@@ -897,19 +998,7 @@ inline void z80_device::push(PAIR& r)
  ***************************************************************/
 inline void z80_device::jp(void)
 {
-	auto dest = arg16();
-	reportCall(m_pc.d - 3, dest);
-
-	auto pc = PCD - 3;
-	if (pc >= 0x8000 && pc < 0xE000 && dest < 0x2000) {
-		auto it = std::find(vects.begin(), vects.end(), pc);
-		if (it == vects.end()) {
-			vects.insert(pc);
-			osd_printf_info("PATCH($%04x,3)\n    jp %s\nENDPATCH($%04x,3)\n\n", pc, addrOrSym(dest + BIOSBASE), pc);
-		}
-		if (remap67)
-			dest += BIOSBASE;
-	}
+	auto dest = m_trans->On_Jump(arg16());
 
 	PCD = dest;
 	WZ = PCD;
@@ -918,18 +1007,16 @@ inline void z80_device::jp(void)
 /***************************************************************
  * JP_COND
  ***************************************************************/
-inline void z80_device::jp_cond(bool cond)
+inline void z80_device::jp_cond(bool cond, const char* condition)
 {
-	auto pc = m_pc.d - 3;
 	if (cond)
 	{
-		PCD = arg16();
+		PCD = m_trans->On_JumpConditional(arg16(), condition);
 		WZ = PCD;
 	}
 	else {
 		WZ = arg16(); /* implicit do PC += 2 */
 	}
-	reportCall(pc, WZ);
 }
 
 /***************************************************************
@@ -956,8 +1043,6 @@ inline void z80_device::jr_cond(bool cond, uint8_t opcode)
 	else
 	{
 		WZ = arg();
-		//nomreq_addr(PCD, 3);
-		//PC++;
 	}
 }
 
@@ -965,38 +1050,23 @@ inline void z80_device::jr_cond(bool cond, uint8_t opcode)
  * CALL
  ***************************************************************/
 inline void z80_device::call()
-{
-	m_ea = arg16();
-	reportCall(m_pc.d - 3, m_ea);
-
-	auto pcd = m_ea;
-	auto pc = PCD - 3;
-	if (pc >= 0x8000 && pc < 0xE000 && pcd < 0x2000) {
-		auto it = std::find(vects.begin(), vects.end(), pc);
-		if (it == vects.end()) {
-			vects.insert(pc);
-			osd_printf_info("PATCH($%04x,3)\n    call %s\nENDPATCH($%04x,3)\n\n", pc, addrOrSym(pcd + BIOSBASE), pc);
-		}
-		if (remap67)
-			pcd += BIOSBASE;
-	}
-
+{	
+	m_ea = m_trans->On_Call(arg16());
 	nomreq_addr(PCD - 1, 1);
-	WZ = pcd;
+	WZ = m_ea;
 	wm16_sp(m_pc);
-	PCD = pcd;
+	PCD = m_ea;
 }
 
 /***************************************************************
  * CALL_COND
  ***************************************************************/
-inline void z80_device::call_cond(bool cond, uint8_t opcode)
+inline void z80_device::call_cond(bool cond, uint8_t opcode, const char* condcode)
 {
-	auto pc = m_pc.d - 3;
 	if (cond)
 	{
 		CC(ex, opcode);
-		m_ea = arg16();
+		m_ea = m_trans->On_CallConditional(arg16(), condcode);
 		nomreq_addr(PCD - 1, 1);
 		WZ = m_ea;
 		wm16_sp(m_pc);
@@ -1005,7 +1075,6 @@ inline void z80_device::call_cond(bool cond, uint8_t opcode)
 	else {
 		WZ = arg16(); /* implicit call PC+=2; */
 	}
-	reportCall(pc, WZ);
 }
 
 /***************************************************************
@@ -1027,6 +1096,8 @@ inline void z80_device::ret_cond(bool cond, uint8_t opcode)
  ***************************************************************/
 inline void z80_device::retn()
 {
+	//reportOnce(PCD, "retn");
+
 	LOG(("Z80 RETN m_iff1:%d m_iff2:%d\n", m_iff1, m_iff2));
 	pop(m_pc);
 	WZ = PC;
@@ -1563,7 +1634,7 @@ inline void z80_device::cpi()
  ***************************************************************/
 inline void z80_device::ini()
 {
-	reportOnce(PCD, "INI");
+	//reportOnce(PCD, "INI");
 	nomreq_ir(1);
 	unsigned t;
 	uint8_t io = in(BC);
@@ -1583,7 +1654,7 @@ inline void z80_device::ini()
  ***************************************************************/
 inline void z80_device::outi()
 {
-	reportOnce(PCD, "OUTI");
+	//reportOnce(PCD, "OUTI");
 	nomreq_ir(1);
 	unsigned t;
 	uint8_t io = rm(HL);
@@ -1637,7 +1708,7 @@ inline void z80_device::cpd()
  ***************************************************************/
 inline void z80_device::ind()
 {
-	reportOnce(PCD, "IND");
+	//reportOnce(PCD, "IND");
 	nomreq_ir(1);
 	unsigned t;
 	uint8_t io = in(BC);
@@ -1657,7 +1728,7 @@ inline void z80_device::ind()
  ***************************************************************/
 inline void z80_device::outd()
 {
-	reportOnce(PCD, "OUTD");
+	//reportOnce(PCD, "OUTD");
 	nomreq_ir(1);
 	unsigned t;
 	uint8_t io = rm(HL);
@@ -1707,7 +1778,7 @@ inline void z80_device::cpir()
  ***************************************************************/
 inline void z80_device::inir()
 {
-	reportOnce(PCD, "INIR");
+	//reportOnce(PCD, "INIR");
 	ini();
 	if (B != 0)
 	{
@@ -1722,7 +1793,7 @@ inline void z80_device::inir()
  ***************************************************************/
 inline void z80_device::otir()
 {
-	reportOnce(PCD, "OTIR");
+	//reportOnce(PCD, "OTIR");
 	outi();
 	if (B != 0)
 	{
@@ -2654,7 +2725,7 @@ OP(dd, e6) { illegal_1(); op_e6(); } /* DB   DD          */
 OP(dd, e7) { illegal_1(); op_e7(); } /* DB   DD          */
 
 OP(dd, e8) { illegal_1(); op_e8(); } /* DB   DD          */
-OP(dd, e9) { reportCall(PC, IX);	 PC = IX; } /* JP   (IX)        */
+OP(dd, e9) { m_trans->On_JumpIndirect(IX, "jp\t(ix)", 1); PC = IX; } /* JP   (IX)        */
 OP(dd, ea) { illegal_1(); op_ea(); } /* DB   DD          */
 OP(dd, eb) { illegal_1(); op_eb(); } /* DB   DD          */
 OP(dd, ec) { illegal_1(); op_ec(); } /* DB   DD          */
@@ -2945,7 +3016,7 @@ OP(fd, e6) { illegal_1(); op_e6(); } /* DB   FD          */
 OP(fd, e7) { illegal_1(); op_e7(); } /* DB   FD          */
 
 OP(fd, e8) { illegal_1(); op_e8(); } /* DB   FD          */
-OP(fd, e9) { reportCall(PC, IY);	  PC = IY; } /* JP   (IY)        */
+OP(fd, e9) { m_trans->On_JumpIndirect(IY, "jp\t(iy)", 1); PC = IY; } /* JP   (IY)        */
 OP(fd, ea) { illegal_1(); op_ea(); } /* DB   FD          */
 OP(fd, eb) { illegal_1(); op_eb(); } /* DB   FD          */
 OP(fd, ec) { illegal_1(); op_ec(); } /* DB   FD          */
@@ -3052,76 +3123,76 @@ OP(ed, 3d) { illegal_2(); } /* DB   ED          */
 OP(ed, 3e) { illegal_2(); } /* DB   ED          */
 OP(ed, 3f) { illegal_2(); } /* DB   ED          */
 
-OP(ed, 40) { B = in(BC); informin(BC, B, "b,(c)"); F = (F & CF) | SZP[B]; } /* IN   B,(C)       */
-OP(ed, 41) { out(BC, B); informout(BC, B, "(c),b"); } /* OUT  (C),B       */
+OP(ed, 40) { B = in(BC); /*informin(BC, B, "b,(c)");*/ F = (F & CF) | SZP[B]; } /* IN   B,(C)       */
+OP(ed, 41) { out(BC, B); /*informout(BC, B, "(c),b");*/ } /* OUT  (C),B       */
 OP(ed, 42) { sbc_hl(m_bc); } /* SBC  HL,BC       */
 OP(ed, 43) { m_ea = arg16(); wm16(m_ea, m_bc); WZ = m_ea + 1; } /* LD   (w),BC      */
 OP(ed, 44) { neg(); } /* NEG              */
 OP(ed, 45) { retn(); } /* RETN             */
-OP(ed, 46) { m_im = 0; reportOnce(m_pc.d - 2, "IM 0"); } /* IM   0           */
+OP(ed, 46) { m_im = 0; /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
 OP(ed, 47) { ld_i_a(); } /* LD   i,A         */
 
-OP(ed, 48) { C = in(BC);  informin(BC, C, "c,(c)"); F = (F & CF) | SZP[C]; } /* IN   C,(C)       */
-OP(ed, 49) { out(BC, C);  informout(BC, C, "(c),c"); } /* OUT  (C),C       */
+OP(ed, 48) { C = in(BC);  /*informin(BC, C, "c,(c)");*/ F = (F & CF) | SZP[C]; } /* IN   C,(C)       */
+OP(ed, 49) { out(BC, C);  /*informout(BC, C, "(c),c");*/ } /* OUT  (C),C       */
 OP(ed, 4a) { adc_hl(m_bc); } /* ADC  HL,BC       */
 OP(ed, 4b) { m_ea = arg16(); rm16(m_ea, m_bc); WZ = m_ea + 1; } /* LD   BC,(w)      */
 OP(ed, 4c) { neg(); } /* NEG              */
 OP(ed, 4d) { reti(); } /* RETI             */
-OP(ed, 4e) { m_im = 0; reportOnce(m_pc.d - 2, "IM 0"); } /* IM   0           */
+OP(ed, 4e) { m_im = 0; /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
 OP(ed, 4f) { ld_r_a(); } /* LD   r,A         */
 
-OP(ed, 50) { D = in(BC); informin(BC, D, "d,(c)"); F = (F & CF) | SZP[D]; } /* IN   D,(C)       */
-OP(ed, 51) { out(BC, D); informout(BC, D, "(c),d"); } /* OUT  (C),D       */
+OP(ed, 50) { D = in(BC); /*informin(BC, D, "d,(c)");*/ F = (F & CF) | SZP[D]; } /* IN   D,(C)       */
+OP(ed, 51) { out(BC, D); /*informout(BC, D, "(c),d");*/ } /* OUT  (C),D       */
 OP(ed, 52) { sbc_hl(m_de); } /* SBC  HL,DE       */
 OP(ed, 53) { m_ea = arg16(); wm16(m_ea, m_de); WZ = m_ea + 1; } /* LD   (w),DE      */
 OP(ed, 54) { neg(); } /* NEG              */
 OP(ed, 55) { retn(); } /* RETN             */
-OP(ed, 56) { m_im = 1;  reportOnce(m_pc.d - 2, "IM 1"); } /* IM   1           */
+OP(ed, 56) { m_im = 1;  /*reportOnce(m_pc.d - 2, "IM 1");*/ } /* IM   1           */
 OP(ed, 57) { ld_a_i(); } /* LD   A,i         */
 
-OP(ed, 58) { E = in(BC); informin(BC, E, "e,(c)"); F = (F & CF) | SZP[E]; } /* IN   E,(C)       */
-OP(ed, 59) { out(BC, E); informout(BC, E, "(c),e"); } /* OUT  (C),E       */
+OP(ed, 58) { E = in(BC); /*informin(BC, E, "e,(c)");*/ F = (F & CF) | SZP[E]; } /* IN   E,(C)       */
+OP(ed, 59) { out(BC, E); /*informout(BC, E, "(c),e");*/ } /* OUT  (C),E       */
 OP(ed, 5a) { adc_hl(m_de); } /* ADC  HL,DE       */
 OP(ed, 5b) { m_ea = arg16(); rm16(m_ea, m_de); WZ = m_ea + 1; } /* LD   DE,(w)      */
 OP(ed, 5c) { neg(); } /* NEG              */
 OP(ed, 5d) { reti(); } /* RETI             */
-OP(ed, 5e) { m_im = 2; reportOnce(m_pc.d - 2, "IM 2"); } /* IM   2           */
+OP(ed, 5e) { m_im = 2; /*reportOnce(m_pc.d - 2, "IM 2");*/ } /* IM   2           */
 OP(ed, 5f) { ld_a_r(); } /* LD   A,r         */
 
-OP(ed, 60) { H = in(BC); informin(BC, H, "h,(c)"); F = (F & CF) | SZP[H]; } /* IN   H,(C)       */
-OP(ed, 61) { out(BC, H); informout(BC, H, "(c),h"); } /* OUT  (C),H       */
+OP(ed, 60) { H = in(BC); /*informin(BC, H, "h,(c)");*/ F = (F & CF) | SZP[H]; } /* IN   H,(C)       */
+OP(ed, 61) { out(BC, H); /*informout(BC, H, "(c),h");*/ } /* OUT  (C),H       */
 OP(ed, 62) { sbc_hl(m_hl); } /* SBC  HL,HL       */
 OP(ed, 63) { m_ea = arg16(); wm16(m_ea, m_hl); WZ = m_ea + 1; } /* LD   (w),HL      */
 OP(ed, 64) { neg(); } /* NEG              */
 OP(ed, 65) { retn(); } /* RETN             */
-OP(ed, 66) { m_im = 0;  reportOnce(m_pc.d - 2, "IM 0"); } /* IM   0           */
+OP(ed, 66) { m_im = 0;  /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
 OP(ed, 67) { rrd(); } /* RRD  (HL)        */
 
-OP(ed, 68) { L = in(BC); informin(BC, L, "l,(c)"); F = (F & CF) | SZP[L]; } /* IN   L,(C)       */
-OP(ed, 69) { out(BC, L); informout(BC, L, "(c),l"); } /* OUT  (C),L       */
+OP(ed, 68) { L = in(BC); /*informin(BC, L, "l,(c)");*/ F = (F & CF) | SZP[L]; } /* IN   L,(C)       */
+OP(ed, 69) { out(BC, L); /*informout(BC, L, "(c),l");*/ } /* OUT  (C),L       */
 OP(ed, 6a) { adc_hl(m_hl); } /* ADC  HL,HL       */
 OP(ed, 6b) { m_ea = arg16(); rm16(m_ea, m_hl); WZ = m_ea + 1; } /* LD   HL,(w)      */
 OP(ed, 6c) { neg(); } /* NEG              */
 OP(ed, 6d) { reti(); } /* RETI             */
-OP(ed, 6e) { m_im = 0;  reportOnce(m_pc.d - 2, "IM 0"); } /* IM   0           */
+OP(ed, 6e) { m_im = 0;  /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
 OP(ed, 6f) { rld(); } /* RLD  (HL)        */
 
-OP(ed, 70) { uint8_t res = in(BC); informin(BC, 0, "(c)"); F = (F & CF) | SZP[res]; } /* IN   0,(C)       */
-OP(ed, 71) { out(BC, 0); informout(BC, 0, "(c),0"); } /* OUT  (C),0       */
+OP(ed, 70) { uint8_t res = in(BC); /*informin(BC, 0, "(c)");*/ F = (F & CF) | SZP[res]; } /* IN   0,(C)       */
+OP(ed, 71) { out(BC, 0); /*informout(BC, 0, "(c),0");*/ } /* OUT  (C),0       */
 OP(ed, 72) { sbc_hl(m_sp); } /* SBC  HL,SP       */
 OP(ed, 73) { m_ea = arg16(); wm16(m_ea, m_sp); WZ = m_ea + 1; } /* LD   (w),SP      */
 OP(ed, 74) { neg(); } /* NEG              */
 OP(ed, 75) { retn(); } /* RETN             */
-OP(ed, 76) { m_im = 1;  reportOnce(m_pc.d - 2, "IM 1"); } /* IM   1           */
+OP(ed, 76) { m_im = 1;  /*reportOnce(m_pc.d - 2, "IM 1");*/ } /* IM   1           */
 OP(ed, 77) { illegal_2(); } /* DB   ED,77       */
 
-OP(ed, 78) { A = in(BC); informin(BC, A, "a,(c)"); F = (F & CF) | SZP[A]; WZ = BC + 1; } /* IN   A,(C)       */
-OP(ed, 79) { out(BC, A);  WZ = BC + 1;  informout(BC, A, "(c),a"); } /* OUT  (C),A       */
+OP(ed, 78) { A = in(BC); /*informin(BC, A, "a,(c)");*/ F = (F & CF) | SZP[A]; WZ = BC + 1; } /* IN   A,(C)       */
+OP(ed, 79) { out(BC, A);  WZ = BC + 1;  /*informout(BC, A, "(c),a");*/ } /* OUT  (C),A       */
 OP(ed, 7a) { adc_hl(m_sp); } /* ADC  HL,SP       */
 OP(ed, 7b) { m_ea = arg16(); rm16(m_ea, m_sp); WZ = m_ea + 1; } /* LD   SP,(w)      */
 OP(ed, 7c) { neg(); } /* NEG              */
 OP(ed, 7d) { reti(); } /* RETI             */
-OP(ed, 7e) { m_im = 2;  reportOnce(m_pc.d - 2, "IM 2"); } /* IM   2           */
+OP(ed, 7e) { m_im = 2;  /*reportOnce(m_pc.d - 2, "IM 2");*/ } /* IM   2           */
 OP(ed, 7f) { illegal_2(); } /* DB   ED,7F       */
 
 OP(ed, 80) { illegal_2(); } /* DB   ED          */
@@ -3490,72 +3561,72 @@ OP(op, bf) { cp(A); } /* CP   A           */
 
 OP(op, c0) { ret_cond(!(F & ZF), 0xc0); } /* RET  NZ          */
 OP(op, c1) { pop(m_bc); } /* POP  BC          */
-OP(op, c2) { jp_cond(!(F & ZF)); } /* JP   NZ,a        */
+OP(op, c2) { jp_cond(!(F & ZF), "nz"); } /* JP   NZ,a        */
 OP(op, c3) { jp(); } /* JP   a           */
-OP(op, c4) { call_cond(!(F & ZF), 0xc4); } /* CALL NZ,a        */
+OP(op, c4) { call_cond(!(F & ZF), 0xc4, "NZ"); } /* CALL NZ,a        */
 OP(op, c5) { push(m_bc); } /* PUSH BC          */
 OP(op, c6) { add_a(arg()); } /* ADD  A,n         */
 OP(op, c7) { rst(0x00); } /* RST  0           */
 
 OP(op, c8) { ret_cond(F & ZF, 0xc8); } /* RET  Z           */
 OP(op, c9) { pop(m_pc); WZ = PCD; } /* RET              */
-OP(op, ca) { jp_cond(F & ZF); } /* JP   Z,a         */
+OP(op, ca) { jp_cond(F & ZF, "z"); } /* JP   Z,a         */
 OP(op, cb) { EXEC(cb, rop()); } /* **** CB xx       */
-OP(op, cc) { call_cond(F & ZF, 0xcc); } /* CALL Z,a         */
+OP(op, cc) { call_cond(F & ZF, 0xcc, "z"); } /* CALL Z,a         */
 OP(op, cd) { call(); } /* CALL a           */
 OP(op, ce) { adc_a(arg()); } /* ADC  A,n         */
 OP(op, cf) { rst(0x08); } /* RST  1           */
 
 OP(op, d0) { ret_cond(!(F & CF), 0xd0); } /* RET  NC          */
 OP(op, d1) { pop(m_de); } /* POP  DE          */
-OP(op, d2) { jp_cond(!(F & CF)); } /* JP   NC,a        */
-OP(op, d3) { unsigned n = arg() | (A << 8); out(n, A); informout(n, A, "(n),a"); WZ_L = ((n & 0xff) + 1) & 0xff;  WZ_H = A; } /* OUT  (n),A       */
-OP(op, d4) { call_cond(!(F & CF), 0xd4); } /* CALL NC,a        */
+OP(op, d2) { jp_cond(!(F & CF), "nc"); } /* JP   NC,a        */
+OP(op, d3) { unsigned n = arg() | (A << 8); out(n, A); /*informout(n, A, "(n),a");*/ WZ_L = ((n & 0xff) + 1) & 0xff;  WZ_H = A; } /* OUT  (n),A       */
+OP(op, d4) { call_cond(!(F & CF), 0xd4, "nc"); } /* CALL NC,a        */
 OP(op, d5) { push(m_de); } /* PUSH DE          */
 OP(op, d6) { sub(arg()); } /* SUB  n           */
 OP(op, d7) { rst(0x10); } /* RST  2           */
 
 OP(op, d8) { ret_cond(F & CF, 0xd8); } /* RET  C           */
 OP(op, d9) { exx(); } /* EXX              */
-OP(op, da) { jp_cond(F & CF); } /* JP   C,a         */
-OP(op, db) { unsigned n = arg() | (A << 8); A = in(n); informin(n, A, "a,(n)"); WZ = n + 1; } /* IN   A,(n)       */
-OP(op, dc) { call_cond(F & CF, 0xdc); } /* CALL C,a         */
+OP(op, da) { jp_cond(F & CF, "c"); } /* JP   C,a         */
+OP(op, db) { unsigned n = arg() | (A << 8); A = in(n); /*informin(n, A, "a,(n)");*/ WZ = n + 1; } /* IN   A,(n)       */
+OP(op, dc) { call_cond(F & CF, 0xdc, "c"); } /* CALL C,a         */
 OP(op, dd) { EXEC(dd, rop()); } /* **** DD xx       */
 OP(op, de) { sbc_a(arg()); } /* SBC  A,n         */
 OP(op, df) { rst(0x18); } /* RST  3           */
 
 OP(op, e0) { ret_cond(!(F & PF), 0xe0); } /* RET  PO          */
 OP(op, e1) { pop(m_hl); } /* POP  HL          */
-OP(op, e2) { jp_cond(!(F & PF)); } /* JP   PO,a        */
+OP(op, e2) { jp_cond(!(F & PF), "po"); } /* JP   PO,a        */
 OP(op, e3) { ex_sp(m_hl); } /* EX   HL,(SP)     */
-OP(op, e4) { call_cond(!(F & PF), 0xe4); } /* CALL PO,a        */
+OP(op, e4) { call_cond(!(F & PF), 0xe4, "po"); } /* CALL PO,a        */
 OP(op, e5) { push(m_hl); } /* PUSH HL          */
 OP(op, e6) { and_a(arg()); } /* AND  n           */
 OP(op, e7) { rst(0x20); } /* RST  4           */
 
 OP(op, e8) { ret_cond(F & PF, 0xe8); } /* RET  PE          */
-OP(op, e9) { reportCall(PC, HL);	 PC = HL; } /* JP   (HL)        */
-OP(op, ea) { jp_cond(F & PF); } /* JP   PE,a        */
+OP(op, e9) { m_trans->On_JumpIndirect(HL, "jp\t(hl)", 0); PC = HL; } /* JP   (HL)        */
+OP(op, ea) { jp_cond(F & PF, "pe"); } /* JP   PE,a        */
 OP(op, eb) { ex_de_hl(); } /* EX   DE,HL       */
-OP(op, ec) { call_cond(F & PF, 0xec); } /* CALL PE,a        */
+OP(op, ec) { call_cond(F & PF, 0xec, "pe"); } /* CALL PE,a        */
 OP(op, ed) { EXEC(ed, rop()); } /* **** ED xx       */
 OP(op, ee) { xor_a(arg()); } /* XOR  n           */
 OP(op, ef) { rst(0x28); } /* RST  5           */
 
 OP(op, f0) { ret_cond(!(F & SF), 0xf0); } /* RET  P           */
 OP(op, f1) { pop(m_af); } /* POP  AF          */
-OP(op, f2) { jp_cond(!(F & SF)); } /* JP   P,a         */
-OP(op, f3) { m_iff1 = m_iff2 = 0; if (m_pc.d >= 0x8000 && m_pc.d < 0xe000) reportOnce(m_pc.d - 1, "DI"); } /* DI               */
-OP(op, f4) { call_cond(!(F & SF), 0xf4); } /* CALL P,a         */
+OP(op, f2) { jp_cond(!(F & SF), "p"); } /* JP   P,a         */
+OP(op, f3) { m_iff1 = m_iff2 = 0; /*if (m_pc.d >= 0x8000 && m_pc.d < 0xe000) reportOnce(m_pc.d - 1, "DI");*/ } /* DI               */
+OP(op, f4) { call_cond(!(F & SF), 0xf4, "p"); } /* CALL P,a         */
 OP(op, f5) { push(m_af); } /* PUSH AF          */
 OP(op, f6) { or_a(arg()); } /* OR   n           */
 OP(op, f7) { rst(0x30); } /* RST  6           */
 
 OP(op, f8) { ret_cond(F & SF, 0xf8); } /* RET  M           */
 OP(op, f9) { nomreq_ir(2); SP = HL; } /* LD   SP,HL       */
-OP(op, fa) { jp_cond(F & SF); } /* JP   M,a         */
-OP(op, fb) { ei(); if (m_pc.d >= 0x8000 && m_pc.d < 0xe000) reportOnce(m_pc.d - 1, "EI"); } /* EI               */
-OP(op, fc) { call_cond(F & SF, 0xfc); } /* CALL M,a         */
+OP(op, fa) { jp_cond(F & SF, "m"); } /* JP   M,a         */
+OP(op, fb) { ei(); /*if (m_pc.d >= 0x8000 && m_pc.d < 0xe000) reportOnce(m_pc.d - 1, "EI");*/ } /* EI               */
+OP(op, fc) { call_cond(F & SF, 0xfc, "m"); } /* CALL M,a         */
 OP(op, fd) { EXEC(fd, rop()); } /* **** FD xx       */
 OP(op, fe) { cp(arg()); } /* CP   n           */
 OP(op, ff) { rst(0x38); } /* RST  7           */
@@ -4168,17 +4239,7 @@ z80_device::z80_device(const machine_config& mconfig, device_type type, const ch
 	m_nomreq_cb(*this),
 	m_halt_cb(*this)
 {
-	std::string m5c_opts(mconfig.options().m5C_opts());
-
-	remap67 = m5c_opts.find("remap67") != -1;
-	remapIn = m5c_opts.find("remapIn") != -1;
-	remapOut = m5c_opts.find("remapOut") != -1;
-	logvdp = m5c_opts.find("logVDP") != -1;
-	if (m5c_opts.find("remapAll") != -1) {
-		remap67 = true;
-		remapIn = true;
-		remapOut = true;
-	}
+	m_trans = new ColecoToM5Translator(this, mconfig.options().m5C_opts());
 }
 
 device_memory_interface::space_config_vector z80_device::memory_space_config() const
