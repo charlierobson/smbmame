@@ -354,9 +354,9 @@ public:
 		}
 	}
 
-	// virtual void On_InAN(uint16_t port) {}
-	// virtual void On_InRC(char reg) {}
-	// virtual void On_InIDx(void) {}
+	virtual void On_InAN(uint16_t port) {}
+	virtual void On_InRC(char reg) {}
+	virtual void On_InIDx(void) {}
 
 	// virtual void On_OutNA(uint16_t port) {}
 	// virtual void On_OutCR(char reg) {}
