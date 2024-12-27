@@ -143,78 +143,231 @@ public:
 	int On_Call(int callAddr)
 	{
 		auto pc = PC(-3);
-		bool callShouldBeRemapped = (AddrIsInBIOS(callAddr) && IsExecutingGameROM(pc));
+		bool callShouldBeRemapped = AddrIsInBIOS(callAddr) && IsExecutingGameROM(pc);
 		int remappedAddr = callAddr + (callShouldBeRemapped ? 0xe000 : 0);
 
-		if (!HasVisited(pc) && callShouldBeRemapped)
+		if (callShouldBeRemapped && !HasVisited(pc))
 		{
 			Visit(pc);
 			PrintPatch(pc, "call", SymbolForAddress(remappedAddr).c_str(), 3);
-			return remappedAddr;
 		}
 
-		return callAddr;
+		return remappedAddr;
 	}
 
 	int On_CallConditional(int callAddr, const char* conditioncode)
 	{
-		auto pc = PC(-4);
-		bool callShouldBeRemapped = (AddrIsInBIOS(callAddr) && IsExecutingGameROM(pc));
+		auto pc = PC(-3);
+		bool callShouldBeRemapped = AddrIsInBIOS(callAddr) && IsExecutingGameROM(pc);
 		int remappedAddr = callAddr + (callShouldBeRemapped ? 0xe000 : 0);
 
-		if (!HasVisited(pc) && callShouldBeRemapped)
+		if (callShouldBeRemapped && !HasVisited(pc))
 		{
 			Visit(pc);
 			PrintPatchConditional(pc, "call", conditioncode, SymbolForAddress(remappedAddr).c_str(), 3);
-			return remappedAddr;
 		}
 
-		return callAddr;
+		return remappedAddr;
 	}
 
 	virtual int On_Jump(int jumpAddr)
 	{
 		auto pc = PC(-3);
-		bool callShouldBeRemapped = (AddrIsInBIOS(jumpAddr) && IsExecutingGameROM(pc));
+		bool callShouldBeRemapped = AddrIsInBIOS(jumpAddr) && IsExecutingGameROM(pc);
 		int remappedAddr = jumpAddr + (callShouldBeRemapped ? 0xe000 : 0);
 
-		if (!HasVisited(pc) && callShouldBeRemapped)
+		if (callShouldBeRemapped && !HasVisited(pc))
 		{
 			Visit(pc);
 			PrintPatch(pc, "jp", SymbolForAddress(remappedAddr).c_str(), 3);
-			return remappedAddr;
 		}
 
-		return jumpAddr;
+		return remappedAddr;
 	}
 
 	virtual int On_JumpConditional(int jumpAddr, const char* conditioncode)
 	{
 		auto pc = PC(-3);
-		bool callShouldBeRemapped = (AddrIsInBIOS(jumpAddr) && IsExecutingGameROM(pc));
+		bool callShouldBeRemapped = AddrIsInBIOS(jumpAddr) && IsExecutingGameROM(pc);
 		int remappedAddr = jumpAddr + (callShouldBeRemapped ? 0xe000 : 0);
 
-		if (!HasVisited(pc) && callShouldBeRemapped)
+		if (callShouldBeRemapped && !HasVisited(pc))
 		{
 			Visit(pc);
 			PrintPatchConditional(pc, "jp", conditioncode, SymbolForAddress(remappedAddr).c_str(), 3);
-			return remappedAddr;
 		}
 
-		return jumpAddr;
+		return remappedAddr;
 	}
 
 	virtual void On_JumpIndirect(int jumpAddr, const char* instruction, int extraOps)
 	{
 		auto pc = PC(-extraOps);
 
-		if (HasVisited(pc) || !IsExecutingGameROM(pc))
+		if (!IsExecutingGameROM(pc) || HasVisited(pc))
 			return;
 
 		std::stringstream ss;
 		ss << instruction << " -> $" << std::hex << jumpAddr;
 
 		CheckOut(pc, ss.str().c_str());
+	}
+
+	int RemapPort(int port)
+	{
+		if (port >= 0xa0 && port <= 0xbf) {
+			// VDP
+			port = 0x10 + (port & 1);
+		}
+		if (port >= 0xe0 && port <= 0xff) {
+			// SN
+			port = 0x20;
+		}
+		return port;
+	}
+
+	int On_InAN(int port)
+	{
+		if (port < 0x80)
+			return port;
+
+		auto pc = PC(-2);
+		if (!IsExecutingGameROM(pc))
+			return port;
+
+		if (HasVisited(pc))
+			return RemapPort(port);
+
+		Visit(pc);
+
+		bool kpjs = port > 0xdf && port <= 0xff;
+		auto portSym = SymbolForPortIn(port);
+
+		std::stringstream ss;
+		ss << "a,(" << portSym << ")";
+
+		// we can generate a patch from this but kp/js requires manual patching
+
+		if (!kpjs)
+			PrintPatch(pc, "in", ss.str().c_str(), 2);
+		else
+			CheckOut(pc, (ss.str() + " ; kp/js needs manual patch\n\n").c_str()); // because there is no io equivalent
+
+		return RemapPort(port);
+	}
+
+	void On_InRC(char reg)
+	{
+		std::stringstream ss;
+		ss << "in " << reg << ",(c)";
+
+		CheckOut(PC(-2), ss.str().c_str());
+	}
+
+	void On_InIDx(void)
+	{
+		CheckOut(PC(-2), "in with repeat");
+	}
+
+	int On_OutNA(int port)
+	{
+		if (port < 0x80)
+			return port;
+
+		auto pc = PC(-2);
+		if (!IsExecutingGameROM(pc) || HasVisited(pc))
+			return RemapPort(port);
+
+		Visit(pc);
+
+		bool kpjs = port > 0xbf && port <= 0xdf;
+		auto portSym = SymbolForPortOut(port);
+
+		std::stringstream ss;
+		ss << "(" << portSym << "),a";
+
+		if (!kpjs)
+			PrintPatch(pc, "out", ss.str().c_str(), 2);
+		else
+			CheckOut(pc, (ss.str() + " ; kp/js selection needs manual patch\n\n").c_str()); // because there is no io equivalent
+
+		return RemapPort(port);
+	}
+
+	void On_OutCR(char reg)
+	{
+		std::stringstream ss;
+		ss << "out" << "(c)," << reg;
+
+		CheckOut(PC(-2), ss.str().c_str());
+	}
+
+	void On_OutIDx(void)
+	{
+		CheckOut(PC(-2), "out with repeat");
+	}
+
+	int On_RD(int addr)
+	{
+		if (memorableAddresses.find(addr) != memorableAddresses.end())
+		{
+			std::stringstream ss;
+			ss << "memorable address read: " << addr;
+			CheckOut(PC(0), ss.str().c_str());
+		}
+		return addr;
+	}
+
+	int On_WR(int addr)
+	{
+		return addr;
+	}
+
+
+	bool HasVisited(int addr)
+	{
+		return _visited.find(addr) != _visited.end();
+	}
+
+	bool IsExecutingGameROM(int addr)
+	{
+		return addr > 0x7fff && addr < 0xe000;
+	}
+
+private:
+	bool AddrIsInBIOS(int addr)
+	{
+		return addr < 0x2000;
+	}
+
+	std::string SymbolForPortIn(int adrlo)
+	{
+		if (adrlo == 0xfc)
+			return "IO_JSPORT1";
+		if (adrlo == 0xfe)
+			return "IO_JSPORT2";
+		else if (adrlo >= 0xa0 && adrlo <= 0xbf)
+			return (adrlo & 1) == 1 ? "IO_VDP_Addr" : "IO_VDP_Data";
+
+		std::stringstream ss;
+		ss << "$" << std::hex << adrlo;
+		return ss.str();
+	}
+
+	std::string SymbolForPortOut(int adrlo)
+	{
+		if (adrlo >= 0x80 && adrlo <= 0x9f)
+			return "IO_CTLSEL_KP";
+		else if (adrlo >= 0xa0 && adrlo <= 0xbf)
+			return (adrlo & 1) == 1 ? "IO_VDP_Addr" : "IO_VDP_Data";
+		else if (adrlo >= 0xc0 && adrlo <= 0xdf)
+			return "IO_CTLSEL_JS";
+		else if (adrlo >= 0xe0 && adrlo <= 0xff)
+			return "IO_PSG";
+
+		std::stringstream ss;
+		ss << "$" << std::hex << adrlo;
+		return ss.str();
 	}
 
 	std::string SymbolForAddress(int addr)
@@ -230,17 +383,11 @@ public:
 		return ss.str();
 	}
 
-	void PrintPatchConditional(int pc, const char* opcode, const char* condition, const char* argument, int size)
+	std::set<int> memorableAddresses =
 	{
-		osd_printf_info("PATCH($%04x,3)\n\t%s\t%s,%s\nENDPATCH($%04x,3)\n\n", pc, opcode, condition, argument, pc);
-	}
+		0x6e
+	};
 
-	void PrintPatch(int pc, const char* opcode, const char* argument, int size)
-	{
-		osd_printf_info("PATCH($%04x,3)\n\t%s\t%s\nENDPATCH($%04x,3)\n\n", pc, opcode, argument, pc);
-	}
-
-private:
 	std::map<int, const char*> vectorMap =
 	{
 		{ 0xFF61, "V_PLAY_SONGS"},
@@ -306,40 +453,6 @@ private:
 };
 
 /*
-On_Jump(int addr)
-{
-	reportCall(m_pc.d - 3, dest);
-
-	auto pc = PCD - 3;
-	if (pc >= 0x8000 && pc < 0xE000 && dest < 0x2000) {
-		auto it = std::find(vects.begin(), vects.end(), pc);
-		if (it == vects.end()) {
-			vects.insert(pc);
-			osd_printf_info("PATCH($%04x,3)\n    jp %s\nENDPATCH($%04x,3)\n\n", pc, addrOrSym(dest + BIOSBASE), pc);
-		}
-		if (remap67)
-			dest += BIOSBASE;
-	}
-}
-ON_CALL(int addr)
-{
-	reportCall(m_pc.d - 3, m_ea);
-
-	auto pcd = m_ea;
-	auto pc = PCD - 3;
-	if (pc >= 0x8000 && pc < 0xE000 && pcd < 0x2000) {
-		auto it = std::find(vects.begin(), vects.end(), pc);
-		if (it == vects.end()) {
-			vects.insert(pc);
-			osd_printf_info("PATCH($%04x,3)\n    call %s\nENDPATCH($%04x,3)\n\n", pc, addrOrSym(pcd + BIOSBASE), pc);
-		}
-		if (remap67)
-			pcd += BIOSBASE;
-	}
-}
-private:
-	const int BIOSBASE = 0xe000;
-
 
 
 void rdmem()
@@ -377,34 +490,6 @@ bool latch;
 
 bool logvdp = false;
 
-static const char* renderSymbolicAddress(int adrlo, bool& kpjs)
-{
-	// 80-9F (W) = Set both controllers to keypad mode
-	// A0-BF (W) = Video Chip (TMS9928A), A0=0 -> Write Register 0 , A0=1 -> Write Register 1
-	// C0-DF (W) = Set both controllers to joystick mode
-	// E0-FF (W) = Sound Chip (SN76489A)
-
-	if (adrlo >= 0x80 && adrlo <= 0x9f) { strcpy(regsym, "IO_CTLSEL_KP"); kpjs = true; }
-	else if (adrlo >= 0xc0 && adrlo <= 0xdf) { strcpy(regsym, "IO_CTLSEL_JS"); kpjs = true; }
-	else if (adrlo >= 0xe0 && adrlo <= 0xff) strcpy(regsym, "IO_PSG");
-	else if (adrlo >= 0xa0 && adrlo <= 0xbf) { if ((adrlo & 1) == 1) strcpy(regsym, "IO_VDP_Addr"); else strcpy(regsym, "IO_VDP_Data"); }
-	else { strcpy(regsym, addrOrSym(adrlo)); }
-
-	return regsym;
-}
-
-static void reportOnce(int pcd, const char* instr)
-{
-	if (pcd < 0x8000 || pcd > 0xdfff)
-		return;
-
-	auto it = std::find(outpoots.begin(), outpoots.end(), pcd);
-	if (it != outpoots.end())
-		return;
-	outpoots.insert(pcd);
-	osd_printf_info("; $%04x %s\n\n", pcd, instr);
-
-}
 
 void z80_device::informin(uint16_t port, uint8_t value, const char* opcodedesc)
 {
@@ -505,19 +590,6 @@ void z80_device::informout(uint16_t port, uint8_t value, const char* opcodedesc)
 	}
 }
 
-	static void reportCall(long pc, long target) {
-		//if (pc > 0x8000 && target < 0x2000) {
-		//	osd_printf_info("CALL/JP to %04x from $%04x\n", target, pc);
-		//}
-	}
-
-	//if (adrlo >= 0x80 && adrlo <= 0x9f) strcpy(regsym, "IO_CTLSEL_KP");
-	//else if (adrlo >= 0xc0 && adrlo <= 0xdf) strcpy(regsym, "IO_CTLSEL_JS");
-	//else if (adrlo >= 0xe0 && adrlo <= 0xff) strcpy(regsym, "IO_PSG");
-	//else if (adrlo >= 0xa0 && adrlo <= 0xbf) { if ((adrlo & 1) == 1) strcpy(regsym, "IO_VDP_Addr"); else strcpy(regsym, "IO_VDP_Data"); }
-	//else {  }
-	//
-};
 */
 
 
@@ -861,6 +933,8 @@ inline void z80_device::out(uint16_t port, uint8_t value)
  ***************************************************************/
 uint8_t z80_device::rm(uint16_t addr)
 {
+	addr = m_trans->On_RD(addr);
+
 	u8 res = m_data.read_byte(addr);
 	T(MTM);
 	return res;
@@ -890,7 +964,18 @@ void z80_device::wm(uint16_t addr, uint8_t value)
 {
 	// As we don't count changes between read and write, simply adjust to the end of requested.
 	if (m_icount_executing != MTM) T(m_icount_executing - MTM);
-	m_data.write_byte(addr, value);
+
+	if (m_trans->IsExecutingGameROM(PC) && (addr < 0x6000 || addr > 0x7fff))
+	{
+		std::stringstream ss;
+		ss << "writing to non-ram $" << std::hex << addr;
+		m_trans->CheckOut(PC, ss.str().c_str());
+	}
+	else
+	{
+		m_data.write_byte(addr, value);
+	}
+
 	T(MTM);
 }
 
@@ -3129,7 +3214,7 @@ OP(ed, 42) { sbc_hl(m_bc); } /* SBC  HL,BC       */
 OP(ed, 43) { m_ea = arg16(); wm16(m_ea, m_bc); WZ = m_ea + 1; } /* LD   (w),BC      */
 OP(ed, 44) { neg(); } /* NEG              */
 OP(ed, 45) { retn(); } /* RETN             */
-OP(ed, 46) { m_im = 0; /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
+OP(ed, 46) { m_im = 0; m_trans->CheckOut(m_pc.d - 2, "IM 0"); } /* IM   0           */
 OP(ed, 47) { ld_i_a(); } /* LD   i,A         */
 
 OP(ed, 48) { C = in(BC);  /*informin(BC, C, "c,(c)");*/ F = (F & CF) | SZP[C]; } /* IN   C,(C)       */
@@ -3138,7 +3223,7 @@ OP(ed, 4a) { adc_hl(m_bc); } /* ADC  HL,BC       */
 OP(ed, 4b) { m_ea = arg16(); rm16(m_ea, m_bc); WZ = m_ea + 1; } /* LD   BC,(w)      */
 OP(ed, 4c) { neg(); } /* NEG              */
 OP(ed, 4d) { reti(); } /* RETI             */
-OP(ed, 4e) { m_im = 0; /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
+OP(ed, 4e) { m_im = 0;  m_trans->CheckOut(m_pc.d - 2, "IM 0");  } /* IM   0           */
 OP(ed, 4f) { ld_r_a(); } /* LD   r,A         */
 
 OP(ed, 50) { D = in(BC); /*informin(BC, D, "d,(c)");*/ F = (F & CF) | SZP[D]; } /* IN   D,(C)       */
@@ -3147,7 +3232,7 @@ OP(ed, 52) { sbc_hl(m_de); } /* SBC  HL,DE       */
 OP(ed, 53) { m_ea = arg16(); wm16(m_ea, m_de); WZ = m_ea + 1; } /* LD   (w),DE      */
 OP(ed, 54) { neg(); } /* NEG              */
 OP(ed, 55) { retn(); } /* RETN             */
-OP(ed, 56) { m_im = 1;  /*reportOnce(m_pc.d - 2, "IM 1");*/ } /* IM   1           */
+OP(ed, 56) { m_im = 1;  m_trans->CheckOut(m_pc.d - 2, "IM 1");  } /* IM   1           */
 OP(ed, 57) { ld_a_i(); } /* LD   A,i         */
 
 OP(ed, 58) { E = in(BC); /*informin(BC, E, "e,(c)");*/ F = (F & CF) | SZP[E]; } /* IN   E,(C)       */
@@ -3156,7 +3241,7 @@ OP(ed, 5a) { adc_hl(m_de); } /* ADC  HL,DE       */
 OP(ed, 5b) { m_ea = arg16(); rm16(m_ea, m_de); WZ = m_ea + 1; } /* LD   DE,(w)      */
 OP(ed, 5c) { neg(); } /* NEG              */
 OP(ed, 5d) { reti(); } /* RETI             */
-OP(ed, 5e) { m_im = 2; /*reportOnce(m_pc.d - 2, "IM 2");*/ } /* IM   2           */
+OP(ed, 5e) { m_im = 2;  m_trans->CheckOut(m_pc.d - 2, "IM 2");  } /* IM   2           */
 OP(ed, 5f) { ld_a_r(); } /* LD   A,r         */
 
 OP(ed, 60) { H = in(BC); /*informin(BC, H, "h,(c)");*/ F = (F & CF) | SZP[H]; } /* IN   H,(C)       */
@@ -3165,7 +3250,7 @@ OP(ed, 62) { sbc_hl(m_hl); } /* SBC  HL,HL       */
 OP(ed, 63) { m_ea = arg16(); wm16(m_ea, m_hl); WZ = m_ea + 1; } /* LD   (w),HL      */
 OP(ed, 64) { neg(); } /* NEG              */
 OP(ed, 65) { retn(); } /* RETN             */
-OP(ed, 66) { m_im = 0;  /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
+OP(ed, 66) { m_im = 0;   m_trans->CheckOut(m_pc.d - 2, "IM 0");  } /* IM   0           */
 OP(ed, 67) { rrd(); } /* RRD  (HL)        */
 
 OP(ed, 68) { L = in(BC); /*informin(BC, L, "l,(c)");*/ F = (F & CF) | SZP[L]; } /* IN   L,(C)       */
@@ -3174,7 +3259,7 @@ OP(ed, 6a) { adc_hl(m_hl); } /* ADC  HL,HL       */
 OP(ed, 6b) { m_ea = arg16(); rm16(m_ea, m_hl); WZ = m_ea + 1; } /* LD   HL,(w)      */
 OP(ed, 6c) { neg(); } /* NEG              */
 OP(ed, 6d) { reti(); } /* RETI             */
-OP(ed, 6e) { m_im = 0;  /*reportOnce(m_pc.d - 2, "IM 0");*/ } /* IM   0           */
+OP(ed, 6e) { m_im = 0;   m_trans->CheckOut(m_pc.d - 2, "IM 0");  } /* IM   0           */
 OP(ed, 6f) { rld(); } /* RLD  (HL)        */
 
 OP(ed, 70) { uint8_t res = in(BC); /*informin(BC, 0, "(c)");*/ F = (F & CF) | SZP[res]; } /* IN   0,(C)       */
@@ -3183,7 +3268,7 @@ OP(ed, 72) { sbc_hl(m_sp); } /* SBC  HL,SP       */
 OP(ed, 73) { m_ea = arg16(); wm16(m_ea, m_sp); WZ = m_ea + 1; } /* LD   (w),SP      */
 OP(ed, 74) { neg(); } /* NEG              */
 OP(ed, 75) { retn(); } /* RETN             */
-OP(ed, 76) { m_im = 1;  /*reportOnce(m_pc.d - 2, "IM 1");*/ } /* IM   1           */
+OP(ed, 76) { m_im = 1;   m_trans->CheckOut(m_pc.d - 2, "IM 1"); } /* IM   1           */
 OP(ed, 77) { illegal_2(); } /* DB   ED,77       */
 
 OP(ed, 78) { A = in(BC); /*informin(BC, A, "a,(c)");*/ F = (F & CF) | SZP[A]; WZ = BC + 1; } /* IN   A,(C)       */
@@ -3192,7 +3277,7 @@ OP(ed, 7a) { adc_hl(m_sp); } /* ADC  HL,SP       */
 OP(ed, 7b) { m_ea = arg16(); rm16(m_ea, m_sp); WZ = m_ea + 1; } /* LD   SP,(w)      */
 OP(ed, 7c) { neg(); } /* NEG              */
 OP(ed, 7d) { reti(); } /* RETI             */
-OP(ed, 7e) { m_im = 2;  /*reportOnce(m_pc.d - 2, "IM 2");*/ } /* IM   2           */
+OP(ed, 7e) { m_im = 2;  m_trans->CheckOut(m_pc.d - 2, "IM 2");  } /* IM   2           */
 OP(ed, 7f) { illegal_2(); } /* DB   ED,7F       */
 
 OP(ed, 80) { illegal_2(); } /* DB   ED          */
@@ -3580,7 +3665,7 @@ OP(op, cf) { rst(0x08); } /* RST  1           */
 OP(op, d0) { ret_cond(!(F & CF), 0xd0); } /* RET  NC          */
 OP(op, d1) { pop(m_de); } /* POP  DE          */
 OP(op, d2) { jp_cond(!(F & CF), "nc"); } /* JP   NC,a        */
-OP(op, d3) { unsigned n = arg() | (A << 8); out(n, A); /*informout(n, A, "(n),a");*/ WZ_L = ((n & 0xff) + 1) & 0xff;  WZ_H = A; } /* OUT  (n),A       */
+OP(op, d3) { unsigned n = m_trans->On_OutNA(arg()) | (A << 8); out(n, A); WZ_L = ((n & 0xff) + 1) & 0xff;  WZ_H = A; } /* OUT  (n),A       */
 OP(op, d4) { call_cond(!(F & CF), 0xd4, "nc"); } /* CALL NC,a        */
 OP(op, d5) { push(m_de); } /* PUSH DE          */
 OP(op, d6) { sub(arg()); } /* SUB  n           */
@@ -3589,7 +3674,7 @@ OP(op, d7) { rst(0x10); } /* RST  2           */
 OP(op, d8) { ret_cond(F & CF, 0xd8); } /* RET  C           */
 OP(op, d9) { exx(); } /* EXX              */
 OP(op, da) { jp_cond(F & CF, "c"); } /* JP   C,a         */
-OP(op, db) { unsigned n = arg() | (A << 8); A = in(n); /*informin(n, A, "a,(n)");*/ WZ = n + 1; } /* IN   A,(n)       */
+OP(op, db) { unsigned n = m_trans->On_InAN(arg()) | (A << 8); A = in(n); WZ = n + 1; } /* IN   A,(n)       */
 OP(op, dc) { call_cond(F & CF, 0xdc, "c"); } /* CALL C,a         */
 OP(op, dd) { EXEC(dd, rop()); } /* **** DD xx       */
 OP(op, de) { sbc_a(arg()); } /* SBC  A,n         */
@@ -3616,7 +3701,7 @@ OP(op, ef) { rst(0x28); } /* RST  5           */
 OP(op, f0) { ret_cond(!(F & SF), 0xf0); } /* RET  P           */
 OP(op, f1) { pop(m_af); } /* POP  AF          */
 OP(op, f2) { jp_cond(!(F & SF), "p"); } /* JP   P,a         */
-OP(op, f3) { m_iff1 = m_iff2 = 0; /*if (m_pc.d >= 0x8000 && m_pc.d < 0xe000) reportOnce(m_pc.d - 1, "DI");*/ } /* DI               */
+OP(op, f3) { m_iff1 = m_iff2 = 0; m_trans->CheckOut(m_pc.d - 1, "DI");  } /* DI               */
 OP(op, f4) { call_cond(!(F & SF), 0xf4, "p"); } /* CALL P,a         */
 OP(op, f5) { push(m_af); } /* PUSH AF          */
 OP(op, f6) { or_a(arg()); } /* OR   n           */
@@ -3625,7 +3710,7 @@ OP(op, f7) { rst(0x30); } /* RST  6           */
 OP(op, f8) { ret_cond(F & SF, 0xf8); } /* RET  M           */
 OP(op, f9) { nomreq_ir(2); SP = HL; } /* LD   SP,HL       */
 OP(op, fa) { jp_cond(F & SF, "m"); } /* JP   M,a         */
-OP(op, fb) { ei(); /*if (m_pc.d >= 0x8000 && m_pc.d < 0xe000) reportOnce(m_pc.d - 1, "EI");*/ } /* EI               */
+OP(op, fb) { ei(); m_trans->CheckOut(m_pc.d - 1, "EI"); } /* EI               */
 OP(op, fc) { call_cond(F & SF, 0xfc, "m"); } /* CALL M,a         */
 OP(op, fd) { EXEC(fd, rop()); } /* **** FD xx       */
 OP(op, fe) { cp(arg()); } /* CP   n           */

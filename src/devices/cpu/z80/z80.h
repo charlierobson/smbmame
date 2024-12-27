@@ -341,26 +341,16 @@ public:
 	{
 		std::string m5c_opts(opts);
 
-		_remap67 = m5c_opts.find("remap67") != -1;
-		_remapIn = m5c_opts.find("remapIn") != -1;
-		_remapOut = m5c_opts.find("remapOut") != -1;
-
 		_logVDP = m5c_opts.find("logVDP") != -1;
-
-		if (m5c_opts.find("remapAll") != -1) {
-			_remap67 = true;
-			_remapIn = true;
-			_remapOut = true;
-		}
 	}
 
-	virtual void On_InAN(uint16_t port) {}
+	virtual int On_InAN(int port) {return port;}
 	virtual void On_InRC(char reg) {}
 	virtual void On_InIDx(void) {}
 
-	// virtual void On_OutNA(uint16_t port) {}
-	// virtual void On_OutCR(char reg) {}
-	// virtual void On_OutIDx(void) {}
+	virtual int On_OutNA(int port) {return port;}
+	virtual void On_OutCR(char reg) {}
+	virtual void On_OutIDx(void) {}
 
 	virtual int On_Call(int addr) { return addr; }
 	virtual int On_CallConditional(int addr, const char* conditioncode) { return addr; }
@@ -369,27 +359,36 @@ public:
 	virtual void On_JumpIndirect(int target, const char* instruction, int extraOps) {}
 	virtual int On_JumpConditional(int addr, const char* conditioncode) { return addr; }
 
-	// virtual uint16_t On_RD(uint16_t addr) { return 0; }
-	// virtual uint16_t On_WR(uint16_t addr) { return 0; }
+	virtual int On_RD(int addr) { return addr; }
+	virtual int On_WR(int addr) { return addr; }
 
-	virtual std::string SymbolForAddress(int addr) { return ""; }
+	inline int PC() { return _z80->pc(); }
+	inline int PC(int offset) { return PC() + offset; }
 
-	virtual void PrintPatchConditional(int addr, const char* opcode, const char* condition, const char* argument, int size) {}
+	void PrintPatch(int pc, const char* opcode, const char* argument, int size)
+	{
+		osd_printf_info("PATCH($%04x,%d)\n\t%s\t%s\nENDPATCH($%04x,%d)\n\n", pc, size, opcode, argument, pc, size);
+	}
 
-	virtual void PrintPatch(int addr, const char* opcode, const char* argument, int size) {}
-
-	virtual inline int PC() { return _z80->pc(); }
-	virtual inline int PC(int offset) { return PC() + offset; }
+	void PrintPatchConditional(int pc, const char* opcode, const char* condition, const char* argument, int size)
+	{
+		osd_printf_info("PATCH($%04x,%d)\n\t%s\t%s,%s\nENDPATCH($%04x,%d)\n\n", pc, size, opcode, condition, argument, pc, size);
+	}
 
 	void CheckOut(int pc, const char* instr)
 	{
-		if (HasVisited(pc) && !IsExecutingGameROM(pc))
+		if (HasVisited(pc) || !IsExecutingGameROM(pc))
 		 	return;
 
 		Visit(pc);
 		osd_printf_info("; $%04x - Check this out: %s\n", pc, instr);
 	}
 
+	virtual bool HasVisited(int addr) { return true; }
+
+	virtual bool IsExecutingGameROM(int addr) { return false; }
+
+protected:
 	bool Visit(int addr)
 	{
 		bool alreadyVisited = _visited.find(addr) != _visited.end();
@@ -397,29 +396,10 @@ public:
 		return alreadyVisited;
 	}
 
-	bool HasVisited(int addr)
-	{
-		return _visited.find(addr) != _visited.end();
-	}
-
-	bool IsExecutingGameROM(int addr)
-	{
-		return addr > 0x7fff && addr < 0xe000;
-	}
-
-	bool AddrIsInBIOS(int addr)
-	{
-		return addr < 0x2000;
-	}
-
-protected:
 	z80_device* _z80;
 
 	std::set<int> _visited;
 
-	bool _remap67 = false;
-	bool _remapIn = false;
-	bool _remapOut = false;
 	bool _logVDP = false;
 };
 
